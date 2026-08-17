@@ -142,7 +142,7 @@ tr.unver td{background:rgba(210,59,59,.06)}
   <img src="assets/logo.png" class="logo" alt="IFP Design Ltd" onerror="this.style.display='none'">
   <h1>Aircraft<span> · </span>Modelling</h1>
   <span class="sub">CAP 1732 taxi-route obstacle surfaces</span>
-  <span class="badge" id="verStamp" title="Tool version and aircraft-data revision">v1.8 · Aircraft Modelling</span>
+  <span class="badge" id="verStamp" title="Tool version and aircraft-data revision">v1.8.1 · Aircraft Modelling</span>
   <span id="meta-strip"></span>
   <button class="mini" id="btnHelp" style="margin-left:12px;flex:none">Help</button>
   <button class="mini" id="btnSaveProj" style="flex:none" disabled>Save project</button>
@@ -845,7 +845,11 @@ loadAircraftMaster().then(()=>{ renderLibSelect(); if(S.aircraft.length) renderA
   document.getElementById('helpClose').addEventListener('click',close);
   ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
-  document.querySelectorAll('.help-link').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();open();}));
+  // Event delegation: catches .help-link clicks even if a panel re-renders.
+  document.addEventListener('click',e=>{
+    const link=e.target.closest('.help-link');
+    if(link){ e.preventDefault(); open(); }
+  });
 })();
 $('btnLibAdd').addEventListener('click',()=>{
   const t=$('libSelect').value;
