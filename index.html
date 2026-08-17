@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aircraft Modelling — Ground Obstacle Generator</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/shpjs@4.0.4/dist/shp.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Shared IFP palette (matches the Surface List & Filtering tools) */
+  --brand-blue:#0982C1; --brand-blue-dark:#076ca1; --brand-blue-tint:#e7f3fa;
+  --navy:#002039;
+  --bg:#f5f7f9; --panel:#ffffff; --panel2:#ffffff; --line:#e2e8ee; --line-strong:#cbd6e0;
+  --ink:#1b2733; --dim:#5b6b7a; --acc:#0982C1; --acc-ink:#ffffff;
+  --hold:#c0453a; --stand:#5b6b7a; --rwy:#334; --route:#0982C1;
+  --ok:#2e9e5b; --warn:#e08a1e; --err:#d23b3b;
+  --shadow:0 1px 2px rgba(0,32,57,.06),0 4px 16px rgba(0,32,57,.05);
+  --mono:"SF Mono",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:14px;padding:0 16px;height:60px;background:#fff;border-bottom:1px solid var(--line)}
+header .logo{max-height:44px;max-width:150px}
+header h1{font-size:16px;font-weight:700;letter-spacing:-.01em;color:var(--navy)}
+header h1 span{color:var(--brand-blue)}
+header .sub{font-size:12px;color:var(--dim)}
+#meta-strip{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--brand-blue-dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:30%}
+#layout{flex:1;display:flex;min-height:0}
+#side::-webkit-resizer{background:var(--line)}
+#side{width:460px;min-width:340px;max-width:70vw;resize:horizontal;overflow-y:auto;background:var(--bg);border-right:1px solid var(--line);padding:14px 14px 40px}
+#map{flex:1;min-width:0;background:#0e1114}
+section.step{margin-bottom:16px;border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:var(--shadow)}
+section.step>h2{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--navy);padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+section.step>h2 .tick{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--dim)}
+section.step>h2 .tick.done{color:var(--ok)}
+section.step .body{padding:12px}
+section.step.collapsed .body{display:none}
+.hint{font-size:12px;color:var(--dim);line-height:1.45;margin-bottom:8px}
+.small{font-size:11px;color:var(--dim)}
+button{font-family:var(--sans);font-size:12.5px;font-weight:600;border:1px solid var(--line-strong);background:#fff;color:var(--navy);border-radius:5px;padding:7px 12px;cursor:pointer;transition:border-color .15s,color .15s}
+button:hover{border-color:var(--brand-blue);color:var(--brand-blue)}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+button.primary{background:var(--brand-blue);color:#fff;border-color:var(--brand-blue)}
+button.primary:hover{background:var(--brand-blue-dark);border-color:var(--brand-blue-dark);color:#fff}
+button.danger{color:var(--err)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.mini{padding:3px 8px;font-size:11px;font-weight:500}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.row:last-child{margin-bottom:0}
+input[type=file]{display:none}
+label.filebtn{display:inline-block}
+input[type=text],input[type=number],select{font-family:var(--mono);font-size:12px;background:#fff;color:var(--ink);border:1px solid var(--line-strong);border-radius:4px;padding:6px 8px}
+input:focus-visible,select:focus-visible{outline:2px solid var(--acc);outline-offset:0}
+.field{display:flex;flex-direction:column;gap:3px}
+.field>span{font-size:11px;color:var(--dim)}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
+th,td{border:1px solid var(--line);padding:4px 5px;text-align:left}
+th{background:#fff;color:var(--dim);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid var(--navy)}
+td input{width:100%;border:none;background:transparent;color:var(--ink);font-family:var(--mono);font-size:11px;padding:1px 2px}
+td input:focus-visible{outline:1px solid var(--acc)}
+.route-card{border:1px solid var(--line);border-radius:5px;padding:9px;margin-bottom:8px;background:#fff}
+.route-card.selected{border-color:var(--route);box-shadow:0 0 0 1px var(--route)}
+.route-card h3{font-size:12px;font-family:var(--mono);display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.route-card input.nm{flex:1;min-width:0;background:transparent;border:none;border-bottom:1px dashed transparent;color:var(--ink);font-family:var(--mono);font-size:12px;padding:1px 2px}
+.route-card input.nm:hover{border-bottom-color:var(--line)}
+.route-card input.nm:focus-visible{outline:none;border-bottom:1px dashed var(--acc)}
+.route-card .swatch{cursor:pointer}
+#acWrap{overflow-x:auto}
+#acTable{min-width:100%}
+tr.vrow td{background:var(--brand-blue-tint);padding:4px 6px}
+tr.vrow .inner{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+tr.vrow .src{color:var(--dim);font-size:10px;flex:1;min-width:120px}
+td.vcell{white-space:nowrap;text-align:center}
+.vtag{font-family:var(--mono);font-size:9.5px;border-radius:3px;padding:2px 5px;border:1px solid}
+.vtag.no{color:var(--err);border-color:var(--err)}
+.vtag.yes{color:var(--ok);border-color:var(--ok)}
+.vtag.local{color:var(--warn);border-color:var(--warn)}
+tr.unver td{background:rgba(210,59,59,.06)}
+#gateMsg{font-size:11.5px;line-height:1.5;border:1px solid var(--err);border-radius:5px;padding:8px;margin-bottom:8px;color:var(--err);display:none}
+#gateMsg.on{display:block}
+.route-card .swatch{width:10px;height:10px;border-radius:2px;flex:none}
+.route-card .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:7px}
+.route-card .grid .field input,.route-card .grid .field select{width:100%}
+.badge{font-family:var(--mono);font-size:10px;background:var(--brand-blue-tint);border:1px solid #bfe0f1;border-radius:3px;padding:2px 6px;color:var(--brand-blue-dark)}
+#log{font-family:var(--mono);font-size:11px;line-height:1.5;background:#fff;border:1px solid var(--line);border-radius:5px;padding:8px;max-height:130px;overflow-y:auto;white-space:pre-wrap}
+#log .ok{color:var(--ok)} #log .warn{color:var(--warn)} #log .err{color:var(--err)}
+.legend{position:absolute;bottom:18px;right:10px;z-index:900;background:rgba(23,26,31,.92);border:1px solid var(--line);border-radius:6px;padding:9px 12px;font-family:var(--mono);font-size:10.5px;line-height:1.7}
+.legend b{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);display:block;margin-bottom:3px}
+.legend .k{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+#drawbar{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:900;display:none;background:rgba(23,26,31,.95);border:1px solid var(--acc);border-radius:6px;padding:8px 14px;font-size:12px}
+#drawbar.on{display:block}
+#drawbar b{color:var(--acc)}
+.leaflet-container{font-family:var(--sans)}
+.hold-label{background:none;border:none;box-shadow:none;color:var(--hold);font-family:var(--mono);font-size:10px;font-weight:600;text-shadow:0 0 3px #000,0 0 3px #000}
+.osm-label{color:var(--acc)}
+.map-popup .leaflet-popup-content{font-family:var(--mono);font-size:11.5px;margin:10px 12px}
+.map-popup button{margin-top:6px}
+@media (max-width:820px){
+  #layout{flex-direction:column}
+  #side{width:100%;min-width:0;max-height:55%;order:2}
+  #map{min-height:45%;order:1}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <img src="assets/logo.png" class="logo" alt="IFP Design Ltd" onerror="this.style.display='none'">
+  <h1>Taxi-Route Obstacle<span> · </span>Generator</h1>
+  <span class="sub">taxi-route obstacle generator · CAP 1732 input</span>
+  <span class="badge" id="verStamp" title="Tool version and aircraft-data revision">v1.7 · shared aircraft data</span>
+  <span id="meta-strip"></span>
+  <button class="mini" id="btnSaveProj" style="margin-left:12px;flex:none" disabled>Save project</button>
+  <label class="filebtn" style="flex:none"><input type="file" id="projFile" accept=".json"><button class="mini" onclick="document.getElementById('projFile').click()">Load project</button></label>
+  <button class="mini danger" id="btnResetAll" style="flex:none">Reset everything</button>
+</header>
+<div id="layout">
+<aside id="side">
+
+  <section class="step" id="s1">
+    <h2>1 · Survey file <span class="tick" id="t1">—</span></h2>
+    <div class="body">
+      <p class="hint">Load the surveyor's CAP 1732 export (.csv or .xlsx). HOLD points provide positions and orthometric elevations; CENTRE_PT_RWY builds the runway centreline; STANDs are shown for reference.</p>
+      <div class="row">
+        <label class="filebtn"><input type="file" id="surveyFile" accept=".csv,.xlsx,.xls"><button class="primary" onclick="document.getElementById('surveyFile').click()">Load survey file</button></label>
+        <span class="small" id="surveyStats"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="s2">
+    <h2>2 · Taxiway network <span class="tick" id="t2">—</span></h2>
+    <div class="body">
+      <p class="hint">Connect the surveyed holds into taxiway routes, build the runway centreline from the survey, draw routes over imagery with hold-snapping, or import SHP/GeoJSON from CAD.</p>
+      <div class="row">
+        <button id="btnConnect" disabled>Connect holds → taxiway routes</button>
+        <button id="btnRwyRoute" disabled>Runway centreline → route</button>
+      </div>
+      <div class="row">
+        <button id="btnDraw" disabled>Draw route</button>
+        <label class="filebtn"><input type="file" id="lineFile" accept=".zip,.shp,.geojson,.json"><button onclick="document.getElementById('lineFile').click()">Import SHP / GeoJSON</button></label>
+      </div>
+      <p class="small">Drawing: click to add vertices (snaps to holds) · double-click or <b>Enter</b> to finish · <b>Esc</b> cancels.<br>Curves: select a route, then drag a <b>diamond mid-segment handle</b> sideways to bow that segment into an arc; right-click it to straighten; <b>double-click it to split the segment</b> (adds a vertex, so compound/S-curves can be fitted piece by piece). Right-click a round vertex to delete it.</p>
+    </div>
+  </section>
+
+  <section class="step" id="s4">
+    <h2>3 · Aircraft types <span class="tick" id="t4"></span></h2>
+    <div class="body">
+      <p class="hint">Dimensions in metres, heights above ground; elevation = nearest hold ortho height + offset. Library LENGTH / WINGSPAN / TAIL_H are published figures; <b>NOSE_TO_WING, NOSE_H and WING_H are conservative estimates — verify against the manufacturer's airport planning manual</b> (cross-check dims at Eurocontrol's Aircraft Performance Database). The table starts empty each project \u2014 pull in just the types you need from the built-in library (43 ACAP-extracted types plus regional estimates, hover a row for its source). Corrections you make are remembered by this browser and applied whenever that type is added in future; project files carry the table with them. Every type must be signed off as checked against the manufacturer's ACAP before it can be used \u2014 editing any dimension clears that sign-off. Sign-offs are now shared live with the whole team through the aircraft-data service \u2014 verifying a type here marks it verified for everyone, instantly. If the service is unreachable the tool works offline and sign-offs stay local until reconnected. CSV export/import remains for a controlled snapshot.</p>
+      <div class="row">
+        <select id="libSelect" style="max-width:230px"></select>
+        <button class="mini" id="btnLibAdd">Add from library</button>
+      </div>
+      <div class="row">
+        <button class="mini" id="btnAcExport">Export table CSV</button>
+        <button class="mini danger" id="btnAcRevert">Reset library corrections</button>
+        <label class="filebtn"><input type="file" id="acCsvFile" accept=".csv"><button class="mini" onclick="document.getElementById('acCsvFile').click()">Import table CSV</button></label>
+      </div>
+      <div id="acWrap"><table id="acTable"><thead><tr><th>AC_TYPE</th><th>LEN</th><th>SPAN</th><th>N2W</th><th>NOSE_H</th><th>TAIL_H</th><th>WING_H</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div class="row" style="margin-top:8px"><button class="mini" id="btnAddAc">+ Add type</button></div>
+    </div>
+  </section>
+
+  <section class="step" id="s3">
+    <h2>4 · Routes <span class="tick" id="t3">—</span></h2>
+    <div class="body">
+      <p class="hint">Assign each route its aircraft type plus the runway and category used to group the export files (<span class="badge">RUNWAY_CATEGORY.csv</span>). Select a route to edit vertices: drag to move, right-click a vertex to delete.</p>
+      <div class="row">
+        <button class="mini danger" id="btnClearRoutes" disabled>Clear routes</button>
+      </div>
+      <div id="routeList"><p class="small">No routes yet.</p></div>
+    </div>
+  </section>
+
+  
+
+  <section class="step" id="s5">
+    <h2>5 · Generate & export <span class="tick" id="t5">—</span></h2>
+    <div class="body">
+      <div class="row">
+        <div class="field"><span>Radius (m)</span><input type="number" id="inRadius" value="5" step="0.5" style="width:90px"></div>
+        <div class="field"><span>Gap between aircraft (m)</span><input type="number" id="inGap" value="100" step="10" style="width:120px"></div>
+        <div class="field"><span>Hold match tol (m)</span><input type="number" id="inHoldTol" value="1.0" step="0.5" style="width:100px"></div>
+      </div>
+      <p class="small" style="margin-bottom:8px">Station spacing = aircraft length + gap, matching the QGIS tool (length + 100 m).</p>
+      <div id="gateMsg"></div>
+      <div class="row">
+        <button class="primary" id="btnGen" disabled>Generate obstacle points</button>
+        <span class="small" id="genStats"></span>
+      </div>
+      <div class="row" id="exportRow" style="display:none">
+        <button id="btnZip">Download all (zip)</button>
+        <button id="btnXlsx">Validation workbook (.xlsx)</button>
+        <span id="groupBtns"></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="step" id="s6">
+    <h2>Log</h2>
+    <div class="body"><div id="log"></div></div>
+  </section>
+
+</aside>
+<div id="map">
+  <div id="drawbar">Drawing route — <b id="drawCount">0</b> vertices · double-click / Enter to finish · Esc to cancel</div>
+  <div class="legend"><b>Legend</b>
+    <span class="k" style="background:var(--hold)"></span>Hold (survey)<br>
+    <span class="k" style="background:var(--stand)"></span>Stand<br>
+    <span class="k" style="background:var(--rwy)"></span>Rwy centre pt<br>
+    <span class="k" style="background:var(--route);border-radius:1px;height:3px;width:14px"></span>Route<br>
+    <span class="k" style="background:#fff"></span>Obstacle point
+  </div>
+</div>
+</div>
+<script>
+/* ================= state ================= */
+const S = {
+  meta:{}, holds:[], stands:[], rwyPts:[], others:[],
+  utm:null, routes:[], results:null, idCounter:1,
+  selRoute:null
+};
+const COLORS = ['#54c8dd','#e08cd0','#8fd18f','#e0b05c','#9aa4f0','#e0736c','#6cd6c0','#d0d06c'];
+const $ = id => document.getElementById(id);
+const log = (msg, cls) => { const d=$('log'); const s=document.createElement('div'); if(cls)s.className=cls; s.textContent=msg; d.appendChild(s); d.scrollTop=d.scrollHeight; };
+document.querySelectorAll('section.step>h2').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('collapsed')));
+
+/* ================= map ================= */
+const map = L.map('map',{zoomControl:true}).setView([51.876,-0.372],13);
+const imagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:20,maxNativeZoom:19,attribution:'Imagery © Esri'});
+const osmBase = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,maxNativeZoom:19,attribution:'© OpenStreetMap contributors'});
+imagery.addTo(map);
+const lyrSurvey = L.layerGroup().addTo(map);
+const lyrRoutes = L.layerGroup().addTo(map);
+const lyrEdit   = L.layerGroup().addTo(map);
+const lyrOut    = L.layerGroup().addTo(map);
+L.control.layers({'Imagery':imagery,'OpenStreetMap':osmBase},
+  {'Survey points':lyrSurvey,'Routes':lyrRoutes,'Obstacle points':lyrOut},
+  {collapsed:true}).addTo(map);
+
+/* ================= projection ================= */
+function setupUTM(lat,lon){
+  const zone = Math.floor((lon+180)/6)+1;
+  const south = lat<0 ? ' +south':'';
+  S.utm = `+proj=utm +zone=${zone}${south} +datum=WGS84 +units=m +no_defs`;
+  log(`Working CRS: UTM zone ${zone}${south?'S':'N'} (WGS84)`);
+}
+const toXY = ll => proj4('EPSG:4326', S.utm, [ll.lng ?? ll[1], ll.lat ?? ll[0]]); // -> [x,y]
+const toLL = xy => { const r = proj4(S.utm,'EPSG:4326',xy); return {lat:r[1], lng:r[0]}; };
+
+/* ================= survey parsing ================= */
+function dmsToDec(s){
+  s = String(s).trim(); const hemi = s.slice(-1).toUpperCase();
+  const body = s.slice(0,-1);
+  const degLen = (hemi==='N'||hemi==='S') ? 2 : 3;
+  const deg = parseFloat(body.slice(0,degLen));
+  const min = parseFloat(body.slice(degLen,degLen+2));
+  const sec = parseFloat(body.slice(degLen+2));
+  let v = deg + min/60 + sec/3600;
+  if(hemi==='S'||hemi==='W') v = -v;
+  return v;
+}
+function parseSurveyRows(rows){
+  // metadata lines "Key:Value" until header row containing SITE NAME
+  let hdrIdx = -1;
+  for(let i=0;i<rows.length;i++){
+    const c0 = String(rows[i][0]||'');
+    if(/^SITE\s*NAME/i.test(c0)){ hdrIdx = i; break; }
+    const m = c0.match(/^([^:]+):(.*)$/); if(m) S.meta[m[1].trim()] = m[2].trim();
+  }
+  if(hdrIdx<0) throw new Error('Header row (SITE NAME…) not found — is this a CAP 1732 export?');
+  const hdr = rows[hdrIdx].map(h=>String(h).trim().toUpperCase());
+  const col = name => hdr.findIndex(h=>h===name);
+  const ci = {
+    type:col('TYPE OF FEATURE'), ident:col('IDENTIFICATION'), assoc:col('ASSOCIATION'),
+    lat:col('LATITUDE'), lon:col('LONGITUDE'),
+    ortho:hdr.findIndex(h=>h.startsWith('ORTHOMETRIC HEIGHT (M)')),
+    rec:col('RECORD IDENTIFIER')
+  };
+  if(ci.type<0||ci.lat<0||ci.lon<0) throw new Error('Required columns missing (TYPE OF FEATURE / LATITUDE / LONGITUDE).');
+  S.holds=[];S.stands=[];S.rwyPts=[];S.others=[];
+  for(let i=hdrIdx+1;i<rows.length;i++){
+    const r = rows[i]; if(!r || !r[ci.type]) continue;
+    const type = String(r[ci.type]).trim().toUpperCase();
+    let lat,lon;
+    try{ lat = dmsToDec(r[ci.lat]); lon = dmsToDec(r[ci.lon]); }catch(e){ continue; }
+    if(!isFinite(lat)||!isFinite(lon)) continue;
+    const f = { type, id:String(r[ci.ident]??'').trim(), assoc:String(r[ci.assoc]??'').trim(),
+      lat, lon, ortho:parseFloat(r[ci.ortho]), rec:String(r[ci.rec]??'').trim() };
+    if(type==='HOLD') S.holds.push(f);
+    else if(type==='STAND') S.stands.push(f);
+    else if(type==='CENTRE_PT_RWY') S.rwyPts.push(f);
+    else S.others.push(f);
+  }
+}
+function surveyLoaded(){
+  const all=[...S.holds,...S.stands,...S.rwyPts];
+  if(!S.holds.length) throw new Error('No HOLD features found in file.');
+  const clat = all.reduce((a,f)=>a+f.lat,0)/all.length, clon = all.reduce((a,f)=>a+f.lon,0)/all.length;
+  setupUTM(clat,clon);
+  S.holds.forEach(h=>{ const xy=toXY({lat:h.lat,lng:h.lon}); h.x=xy[0]; h.y=xy[1]; });
+  lyrSurvey.clearLayers();
+  S.holds.forEach(h=>{
+    L.circleMarker([h.lat,h.lon],{radius:5,color:'#000',weight:1,fillColor:getComputedStyle(document.documentElement).getPropertyValue('--hold'),fillOpacity:1})
+     .bindTooltip(`HOLD ${h.id} · twy ${h.assoc} · ${h.ortho.toFixed(2)} m`,{className:'hold-label',permanent:false}).addTo(lyrSurvey);
+    L.tooltip({permanent:true,direction:'top',offset:[0,-6],className:'hold-label'}).setContent(h.id).setLatLng([h.lat,h.lon]).addTo(lyrSurvey);
+  });
+  S.stands.forEach(p=>L.circleMarker([p.lat,p.lon],{radius:3,weight:0,fillColor:'#7f8ea3',fillOpacity:.85}).bindTooltip(`STAND ${p.id}`).addTo(lyrSurvey));
+  S.rwyPts.forEach(p=>L.circleMarker([p.lat,p.lon],{radius:2.5,weight:0,fillColor:'#b9c2d0',fillOpacity:.9}).addTo(lyrSurvey));
+  map.fitBounds(L.latLngBounds(all.map(f=>[f.lat,f.lon])).pad(0.15));
+  $('surveyStats').textContent = `${S.holds.length} holds · ${S.rwyPts.length} rwy pts · ${S.stands.length} stands`;
+  $('t1').textContent='✓'; $('t1').classList.add('done');
+  $('meta-strip').textContent = `${S.meta['AerodromeIdent']||''} · ${S.meta['CoordinateSystem']||''} · CAP1732:${S.meta['SurveyCAP1732Compliant']||'?'} · ${S.meta['SurveyProcessDate']||''}`;
+  ['btnDraw','btnConnect'].forEach(id=>$(id).disabled=false);
+  $('btnRwyRoute').disabled = S.rwyPts.length<2;
+  log(`Survey loaded: ${S.holds.length} HOLD, ${S.rwyPts.length} CENTRE_PT_RWY, ${S.stands.length} STAND`,'ok');
+  refreshGenState();
+}
+$('surveyFile').addEventListener('change', async e=>{
+  const file = e.target.files[0]; if(!file) return;
+  try{
+    let rows;
+    if(/\.(xlsx|xls)$/i.test(file.name)){
+      const wb = XLSX.read(await file.arrayBuffer(),{type:'array'});
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false});
+    } else {
+      const text = await file.text();
+      rows = text.split(/\r?\n/).map(l=>l.split(','));
+    }
+    parseSurveyRows(rows); surveyLoaded();
+  }catch(err){ log('Survey load failed: '+err.message,'err'); }
+  e.target.value='';
+});
+
+/* ================= runway centreline route ================= */
+$('btnRwyRoute').addEventListener('click', ()=>{
+  const pts = S.rwyPts.map(p=>{ const xy=toXY({lat:p.lat,lng:p.lon}); return {...p,x:xy[0],y:xy[1]}; });
+  let a=pts[0],b=pts[0],best=0;
+  for(const p of pts) for(const q of pts){ const d=(p.x-q.x)**2+(p.y-q.y)**2; if(d>best){best=d;a=p;b=q;} }
+  const ux=b.x-a.x, uy=b.y-a.y;
+  pts.sort((p,q)=>((p.x-a.x)*ux+(p.y-a.y)*uy)-((q.x-a.x)*ux+(q.y-a.y)*uy));
+  addRoute(pts.map(p=>({lat:p.lat,lng:p.lon})),'Runway centreline (survey)');
+});
+/* ================= drawing with snap ================= */
+let drawing=false, drawPts=[], drawLine=null, drawMarks=[];
+function pxDist(a,b){ const pa=map.latLngToContainerPoint(a), pb=map.latLngToContainerPoint(b); return pa.distanceTo(pb); }
+function snap(ll){
+  let best=null, bestD=15; // px tolerance for holds
+  for(const h of S.holds){ const d=pxDist(ll,[h.lat,h.lon]); if(d<bestD){bestD=d;best=L.latLng(h.lat,h.lon);} }
+  return best||ll;
+}
+function closestOnSeg(ll,A,B){
+  const p=map.latLngToContainerPoint(ll), a=map.latLngToContainerPoint(A), b=map.latLngToContainerPoint(B);
+  const abx=b.x-a.x, aby=b.y-a.y, len2=abx*abx+aby*aby;
+  let t = len2? ((p.x-a.x)*abx+(p.y-a.y)*aby)/len2 : 0; t=Math.max(0,Math.min(1,t));
+  const c = map.containerPointToLatLng([a.x+t*abx, a.y+t*aby]);
+  return [c.lat,c.lng];
+}
+function startDraw(){
+  if(drawing) return;
+  drawing=true; drawPts=[]; $('drawbar').classList.add('on'); $('drawCount').textContent='0';
+  map.getContainer().style.cursor='crosshair'; map.doubleClickZoom.disable();
+  map.on('click', drawClick); map.on('dblclick', finishDraw);
+}
+function drawClick(e){
+  const ll = snap(e.latlng);
+  drawPts.push(ll); $('drawCount').textContent=drawPts.length;
+  drawMarks.push(L.circleMarker(ll,{radius:4,color:'#fff',weight:1,fillColor:'#54c8dd',fillOpacity:1}).addTo(lyrEdit));
+  if(drawLine) drawLine.setLatLngs(drawPts); else drawLine=L.polyline(drawPts,{color:'#54c8dd',weight:3,dashArray:'5 5'}).addTo(lyrEdit);
+}
+function finishDraw(e){
+  if(e) L.DomEvent.stop(e);
+  if(drawPts.length>=2) addRoute(drawPts.map(p=>({lat:p.lat,lng:p.lng})),'Drawn route');
+  cancelDraw(true);
+}
+function cancelDraw(done){
+  drawing=false; $('drawbar').classList.remove('on');
+  map.getContainer().style.cursor=''; map.doubleClickZoom.enable();
+  map.off('click',drawClick); map.off('dblclick',finishDraw);
+  if(drawLine){lyrEdit.removeLayer(drawLine);drawLine=null;}
+  drawMarks.forEach(m=>lyrEdit.removeLayer(m)); drawMarks=[]; drawPts=[];
+  if(!done) log('Drawing cancelled');
+}
+document.addEventListener('keydown',e=>{
+  if(!drawing) return;
+  if(e.key==='Enter') finishDraw();
+  if(e.key==='Escape') cancelDraw(false);
+});
+$('btnDraw').addEventListener('click',startDraw);
+
+/* ================= SHP / GeoJSON import ================= */
+$('lineFile').addEventListener('change', async e=>{
+  const file=e.target.files[0]; if(!file) return;
+  try{
+    let gj;
+    if(/\.zip$/i.test(file.name)) gj = await shp(await file.arrayBuffer());
+    else if(/\.shp$/i.test(file.name)){
+      const geoms = shp.parseShp(await file.arrayBuffer()); // no .prj: CRS unknown
+      gj = {type:'FeatureCollection',features:geoms.map(g=>({type:'Feature',geometry:g,properties:{}}))};
+      log('Bare .shp: no .prj — assuming EPSG:27700 if coords look projected. Prefer a zipped shapefile.','warn');
+    } else gj = JSON.parse(await file.text());
+    const fcs = Array.isArray(gj)?gj:[gj];
+    let n=0;
+    const osgb = '+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +towgs84=446.448,-125.157,542.06,0.15,0.247,0.842,-20.489 +units=m +no_defs';
+    for(const fc of fcs) for(const f of (fc.features||[])){
+      const g=f.geometry; if(!g) continue;
+      const lines = g.type==='LineString'?[g.coordinates]: g.type==='MultiLineString'? g.coordinates: [];
+      for(const line of lines){
+        let pts = line.map(c=>{
+          if(Math.abs(c[0])>180||Math.abs(c[1])>90){ const r=proj4(osgb,'EPSG:4326',[c[0],c[1]]); return {lat:r[1],lng:r[0]}; }
+          return {lat:c[1],lng:c[0]};
+        });
+        const name = f.properties?.LAYER||f.properties?.Layer||f.properties?.name||`Imported ${++n}`;
+        addRoute(pts,String(name)); n++;
+      }
+    }
+    log(`Imported ${n} line(s) from ${file.name}`, n?'ok':'warn');
+  }catch(err){ log('Import failed: '+err.message,'err'); }
+  e.target.value='';
+});
+
+/* ================= arc geometry ================= */
+function circumcenter(A,B,C){
+  const d = 2*(A[0]*(B[1]-C[1]) + B[0]*(C[1]-A[1]) + C[0]*(A[1]-B[1]));
+  if(Math.abs(d)<1e-9) return null;
+  const sq=P=>P[0]*P[0]+P[1]*P[1];
+  return [ (sq(A)*(B[1]-C[1])+sq(B)*(C[1]-A[1])+sq(C)*(A[1]-B[1]))/d,
+           (sq(A)*(C[0]-B[0])+sq(B)*(A[0]-C[0])+sq(C)*(B[0]-A[0]))/d ];
+}
+function arcPoints(P1,M,P2){
+  const c = circumcenter(P1,M,P2);
+  if(!c) return [P1,P2];
+  const rad = Math.hypot(P1[0]-c[0],P1[1]-c[1]);
+  const a1=Math.atan2(P1[1]-c[1],P1[0]-c[0]), am=Math.atan2(M[1]-c[1],M[0]-c[0]), a2=Math.atan2(P2[1]-c[1],P2[0]-c[0]);
+  const norm=a=>{a%=2*Math.PI; return a<0?a+2*Math.PI:a;};
+  const ccwSweep=norm(a2-a1), ccwToM=norm(am-a1);
+  let sweep,dir;
+  if(ccwToM<=ccwSweep+1e-9){sweep=ccwSweep;dir=1;} else {sweep=2*Math.PI-ccwSweep;dir=-1;}
+  const n = Math.min(240, Math.max(8, Math.ceil(rad*sweep/2)));
+  const out=[];
+  for(let k=0;k<=n;k++){const a=a1+dir*sweep*k/n; out.push([c[0]+rad*Math.cos(a), c[1]+rad*Math.sin(a)]);}
+  return out;
+}
+function densifyRoute(r){
+  if(!S.utm||r.pts.length<2) return r.pts.slice();
+  const out=[];
+  for(let i=0;i<r.pts.length-1;i++){
+    const P1=toXY(r.pts[i]), P2=toXY(r.pts[i+1]);
+    const seg = (r.arcs&&r.arcs[i]) ? arcPoints(P1,toXY(r.arcs[i]),P2) : [P1,P2];
+    for(let k=(i===0?0:1);k<seg.length;k++) out.push(toLL(seg[k]));
+  }
+  return out;
+}
+function midLL(a,b){if(!S.utm)return{lat:(a.lat+b.lat)/2,lng:(a.lng+b.lng)/2};const A=toXY(a),B=toXY(b);return toLL([(A[0]+B[0])/2,(A[1]+B[1])/2]);}
+function deleteVertex(r,i){
+  r.pts.splice(i,1);
+  const na={};
+  for(const k of Object.keys(r.arcs||{})){const ki=+k;
+    if(ki<i-1) na[ki]=r.arcs[k]; else if(ki>i) na[ki-1]=r.arcs[k];}
+  r.arcs=na;
+}
+function splitSegment(r,i){
+  if(!S.utm){
+    const V=midLL(r.pts[i],r.pts[i+1]);
+    const na={};
+    for(const k of Object.keys(r.arcs)){const ki=+k; if(ki<i)na[ki]=r.arcs[k]; else if(ki>i)na[ki+1]=r.arcs[k];}
+    r.pts.splice(i+1,0,V); r.arcs=na; return;
+  }
+  const P1=toXY(r.pts[i]), P2=toXY(r.pts[i+1]);
+  let V=null, m1=null, m2=null;
+  if(r.arcs[i]){
+    const Mll=r.arcs[i], M=toXY(Mll);
+    const c=circumcenter(P1,M,P2);
+    if(c){
+      const rad=Math.hypot(P1[0]-c[0],P1[1]-c[1]);
+      const ang=P=>Math.atan2(P[1]-c[1],P[0]-c[0]);
+      const norm=a=>{a%=2*Math.PI;return a<0?a+2*Math.PI:a;};
+      const a1=ang(P1), aM=ang(M), a2=ang(P2);
+      const ccwSweep=norm(a2-a1), ccwToM=norm(aM-a1);
+      const dir=(ccwToM<=ccwSweep+1e-9)?1:-1;
+      const sM = dir===1? ccwToM : 2*Math.PI-ccwToM;
+      const sTot= dir===1? ccwSweep: 2*Math.PI-ccwSweep;
+      const at=s=>{const a=a1+dir*s;return toLL([c[0]+rad*Math.cos(a), c[1]+rad*Math.sin(a)]);};
+      V=Mll; m1=at(sM/2); m2=at(sM+(sTot-sM)/2);
+    } else V=midLL(r.pts[i],r.pts[i+1]);
+  } else V=midLL(r.pts[i],r.pts[i+1]);
+  const na={};
+  for(const k of Object.keys(r.arcs)){const ki=+k; if(ki<i)na[ki]=r.arcs[k]; else if(ki>i)na[ki+1]=r.arcs[k];}
+  if(m1)na[i]=m1; if(m2)na[i+1]=m2;
+  r.pts.splice(i+1,0,{lat:V.lat,lng:V.lng});
+  r.arcs=na;
+}
+const vtxIcon = c=>L.divIcon({className:'',html:`<div style="width:11px;height:11px;border-radius:50%;background:#fff;border:2px solid ${c}"></div>`,iconSize:[11,11],iconAnchor:[6,6]});
+const arcIcon = (c,on)=>L.divIcon({className:'',html:`<div style="width:10px;height:10px;background:${on?c:'#171a1f'};border:2px solid ${on?'#fff':c};transform:rotate(45deg)"></div>`,iconSize:[10,10],iconAnchor:[5,5]});
+
+/* ================= routes ================= */
+function addRoute(pts,name){
+  const id = Date.now()+Math.random();
+  const color = COLORS[S.routes.length%COLORS.length];
+  const r = {id,name,pts,arcs:{},color,acType:'',runway:'RW',category:'CAT I'};
+  S.routes.push(r); renderRoutes(); redrawRoutes(); selectRoute(id);
+  $('t2').textContent='\u2713'; $('t2').classList.add('done'); refreshGenState();
+  return r;
+}
+const routePolys={};
+function redrawRoutes(){
+  lyrRoutes.clearLayers();
+  for(const r of S.routes){
+    if(r.visible===false){ delete routePolys[r.id]; continue; }
+    const pl=L.polyline(densifyRoute(r),{color:r.color,weight:3.5,opacity:.95}).addTo(lyrRoutes);
+    routePolys[r.id]=pl;
+    pl.on('click',ev=>{L.DomEvent.stop(ev);selectRoute(r.id);});
+    if(r.pts.length>1)
+      L.circleMarker(r.pts[0],{radius:5,color:'#000',weight:1,fillColor:r.color,fillOpacity:1}).bindTooltip('start').addTo(lyrRoutes);
+  }
+  drawEditHandles();
+}
+function drawEditHandles(){
+  lyrEdit.clearLayers();
+  const r=S.routes.find(x=>x.id===S.selRoute); if(!r||r.visible===false) return;
+  r.arcs=r.arcs||{};
+  const live=()=>{ if(routePolys[r.id]) routePolys[r.id].setLatLngs(densifyRoute(r)); };
+  r.pts.forEach((p,i)=>{
+    const m=L.marker(p,{draggable:true,icon:vtxIcon(r.color)}).addTo(lyrEdit);
+    m.on('drag',e=>{ r.pts[i]={lat:e.latlng.lat,lng:e.latlng.lng}; live(); });
+    m.on('dragend',e=>{ const s=snap(e.target.getLatLng()); r.pts[i]={lat:s.lat,lng:s.lng}; redrawRoutes(); renderRoutes(); });
+    m.on('contextmenu',()=>{ if(r.pts.length>2){ deleteVertex(r,i); redrawRoutes(); renderRoutes(); } });
+  });
+  for(let i=0;i<r.pts.length-1;i++){
+    const has = !!r.arcs[i];
+    const pos = has ? r.arcs[i] : midLL(r.pts[i],r.pts[i+1]);
+    const m=L.marker(pos,{draggable:true,icon:arcIcon(r.color,has)}).addTo(lyrEdit);
+    m.bindTooltip(has?'Arc \u2014 drag to reshape \u00b7 right-click to straighten \u00b7 double-click to split':'Drag to bow into an arc \u00b7 double-click to split segment',{className:'hold-label'});
+    m.on('drag',e=>{ r.arcs[i]={lat:e.latlng.lat,lng:e.latlng.lng}; live(); });
+    m.on('dragend',()=>{ redrawRoutes(); renderRoutes(); });
+    m.on('contextmenu',()=>{ delete r.arcs[i]; redrawRoutes(); renderRoutes(); });
+    m.on('dblclick',e=>{ if(e.originalEvent) L.DomEvent.stop(e.originalEvent); splitSegment(r,i); redrawRoutes(); renderRoutes(); });
+  }
+}
+function selectRoute(id){ S.selRoute = (S.selRoute===id)?null:id; renderRoutes(); drawEditHandles();
+  document.querySelectorAll('.route-card').forEach(c=>c.classList.toggle('selected',c.dataset.id==String(id)&&S.selRoute!=null)); }
+function renderRoutes(){
+  const box=$('routeList'); box.innerHTML='';
+  if(!S.routes.length){ box.innerHTML='<p class="small">No routes yet.</p>'; $('t3').textContent='\u2014'; return; }
+  const acOpts = ()=> S.aircraft.map(a=>`<option>${a.AC_TYPE}</option>`).join('');
+  const ordered=[...S.routes].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true,sensitivity:'base'}));
+  for(const r of ordered){
+    const div=document.createElement('div'); div.className='route-card'+(S.selRoute===r.id?' selected':''); div.dataset.id=r.id;
+    if(r.visible===false) div.style.opacity='0.55';
+    const lenM = routeLength(r);
+    const nArcs = Object.keys(r.arcs||{}).length;
+    div.innerHTML = `
+      <h3><span class="swatch" title="Zoom to route" style="background:${r.color}"></span><input class="nm" value="${String(r.name).replace(/"/g,'&quot;')}" title="Click to rename">
+        <span class="badge" style="flex:none">${lenM.toFixed(0)} m \u00b7 ${r.pts.length} vtx${nArcs?' \u00b7 '+nArcs+' arc':''}</span></h3>
+      <div class="grid">
+        <div class="field"><span>Aircraft</span><select class="ac"><option value=""></option>${acOpts()}</select></div>
+        <div class="field"><span>Runway</span><input class="rw" type="text" value="${r.runway}"></div>
+        <div class="field"><span>Category</span><input class="cat" type="text" value="${r.category}"></div>
+      </div>
+      <div class="row">
+        <button class="mini sel">${S.selRoute===r.id?'Done editing':'Edit vertices'}</button>
+        <button class="mini vis">${r.visible===false?'Show':'Hide'}</button>
+        <button class="mini cpy">Copy</button>
+        <button class="mini rev">Reverse</button>
+        <button class="mini danger del">Delete</button>
+      </div>`;
+    div.querySelector('.ac').value=r.acType;
+    div.querySelector('.ac').addEventListener('change',e=>{r.acType=e.target.value;refreshGenState();});
+    div.querySelector('.rw').addEventListener('input',e=>r.runway=e.target.value.trim());
+    div.querySelector('.cat').addEventListener('input',e=>r.category=e.target.value.trim());
+    div.querySelector('.swatch').addEventListener('click',()=>map.fitBounds(L.latLngBounds(r.pts).pad(0.3)));
+    div.querySelector('.nm').addEventListener('change',e=>{
+      const v=e.target.value.trim(); if(v) r.name=v; renderRoutes();
+    });
+    div.querySelector('.cpy').addEventListener('click',()=>{
+      const r2={id:Date.now()+Math.random(), name:r.name+' (copy)',
+        pts:r.pts.map(p=>({lat:p.lat,lng:p.lng})),
+        arcs:Object.fromEntries(Object.entries(r.arcs||{}).map(([k,v])=>[k,{lat:v.lat,lng:v.lng}])),
+        color:COLORS[S.routes.length%COLORS.length],
+        acType:r.acType, runway:r.runway, category:r.category};
+      S.routes.push(r2); renderRoutes(); redrawRoutes(); refreshGenState();
+      log(`Route copied: "${r2.name}" \u2014 set its runway/category (e.g. RW25 vs RW08) and Reverse if the taxi direction differs.`,'ok');
+    });
+    div.querySelector('.sel').addEventListener('click',()=>selectRoute(r.id));
+    div.querySelector('.vis').addEventListener('click',()=>{
+      r.visible = r.visible===false ? true : false;
+      if(r.visible===false && S.selRoute===r.id) S.selRoute=null;
+      renderRoutes(); redrawRoutes();
+    });
+    div.querySelector('.rev').addEventListener('click',()=>{
+      const n=r.pts.length; r.pts.reverse();
+      const na={}; for(const k of Object.keys(r.arcs||{})) na[n-2-(+k)]=r.arcs[k]; r.arcs=na;
+      redrawRoutes(); log(`${r.name}: direction reversed`);});
+    div.querySelector('.del').addEventListener('click',()=>{S.routes=S.routes.filter(x=>x!==r); if(S.selRoute===r.id)S.selRoute=null; renderRoutes();redrawRoutes();refreshGenState();});
+    box.appendChild(div);
+  }
+  $('t3').textContent = S.routes.length+' route'+(S.routes.length>1?'s':'');
+  $('btnSaveProj').disabled = !S.routes.length;
+  $('btnClearRoutes').disabled = !S.routes.length;
+}
+function routeLength(r){
+  if(!S.utm||r.pts.length<2) return 0;
+  const d=densifyRoute(r);
+  let L0=0; let prev=toXY(d[0]);
+  for(let i=1;i<d.length;i++){ const c=toXY(d[i]); L0+=Math.hypot(c[0]-prev[0],c[1]-prev[1]); prev=c; }
+  return L0;
+}
+
+/* ================= connect holds into taxiway routes ================= */
+function sortHolds(hs){
+  const parsed = hs.map(h=>{ const m=String(h.id).match(/^([A-Za-z]*)(\d+)([A-Za-z]*)$/); return {h, num:m?parseInt(m[2]):NaN, suf:m?m[3]:''}; });
+  if(parsed.every(p=>isFinite(p.num))){
+    parsed.sort((a,b)=> a.num-b.num || a.suf.localeCompare(b.suf));
+    return parsed.map(p=>p.h);
+  }
+  let A=hs[0],B=hs[0],best=0;
+  for(const p of hs)for(const q of hs){const d=(p.x-q.x)**2+(p.y-q.y)**2;if(d>best){best=d;A=p;B=q;}}
+  const ux=B.x-A.x, uy=B.y-A.y;
+  return hs.slice().sort((p,q)=>((p.x-A.x)*ux+(p.y-A.y)*uy)-((q.x-A.x)*ux+(q.y-A.y)*uy));
+}
+$('btnConnect').addEventListener('click',()=>{
+  const groupsByTwy={};
+  for(const h of S.holds){ const a=(h.assoc||'').trim(); if(!a) continue; (groupsByTwy[a]=groupsByTwy[a]||[]).push(h); }
+  let made=0;
+  for(const [assoc,hs] of Object.entries(groupsByTwy).sort((a,b)=>a[0].localeCompare(b[0],undefined,{numeric:true}))){
+    if(hs.length<2) continue;
+    if(S.routes.some(x=>x.name===`Taxiway ${assoc}`)) continue;
+    addRoute(sortHolds(hs).reverse().map(h=>({lat:h.lat,lng:h.lon})), `Taxiway ${assoc}`);
+    made++;
+  }
+  S.selRoute=null; renderRoutes(); drawEditHandles();
+  if(made) log(`Connected holds into ${made} taxiway route(s), running in taxi direction (highest hold number \u2192 hold 1). Use Reverse on any route that runs the other way, then curve segments with the diamond mid-handles.`,'ok');
+  else log('No new taxiway groups to connect (routes already exist or groups have fewer than 2 holds).','warn');
+});
+/* ================= aircraft table ================= */
+/* Published length/wingspan/tail height; p=1 marks high-wing turboprops for the estimate model */
+const AC_LIBRARY = [
+ ['A19N',33.84,35.80,11.76],['A20N',37.57,35.80,11.76],['A21N',44.51,35.80,11.76],
+ ['A318',31.44,34.10,12.51],['A319',33.84,35.80,11.76],['A320',37.57,35.80,11.76],['A321',44.51,35.80,11.76],
+ ['A310',46.66,43.90,15.80],['A306',54.08,44.84,16.62],
+ ['A332',58.82,60.30,17.39],['A333',63.66,60.30,16.79],['A339',63.66,64.00,16.79],
+ ['A342',59.39,60.30,16.91],['A343',63.69,60.30,16.99],['A345',67.93,63.45,17.53],['A346',75.36,63.45,17.22],
+ ['A359',66.80,64.75,17.05],['A35K',73.79,64.75,17.08],['A388',72.72,79.75,24.09],
+ ['BCS1',35.00,35.10,11.50],['BCS3',38.70,35.10,11.50],
+ ['B712',37.81,28.45,8.92],['B734',36.45,28.88,11.13],['B735',31.01,28.88,11.07],
+ ['B736',31.24,35.79,12.57],['B737',33.63,35.79,12.55],['B738',39.47,35.79,12.55],['B739',42.11,35.79,12.55],
+ ['B37M',35.56,35.92,12.30],['B38M',39.52,35.92,12.30],['B39M',42.16,35.92,12.30],
+ ['B744',70.66,64.44,19.41],['B748',76.25,68.40,19.35],
+ ['B752',47.32,38.05,13.56],['B753',54.47,38.05,13.56],
+ ['B762',48.51,47.57,15.85],['B763',54.94,47.57,15.85],['B764',61.37,51.92,16.87],
+ ['B772',63.73,60.93,18.51],['B77L',63.73,64.80,18.60],['B773',73.86,60.93,18.51],['B77W',73.86,64.80,18.60],
+ ['B788',56.72,60.12,16.92],['B789',62.81,60.12,17.02],['B78X',68.28,60.12,17.02],
+ ['MD11',61.62,51.97,17.60],
+ ['E170',29.90,26.00,9.67],['E75L',31.68,28.65,9.73],['E190',36.24,28.72,10.55],['E195',38.65,28.72,10.55],
+ ['E290',36.24,33.72,10.96],['E295',41.50,35.12,10.96],
+ ['CRJ9',36.20,24.85,7.51],['RJ85',28.55,26.34,8.59],['DH8D',32.83,28.42,8.34,1],
+ ['AT43',22.67,24.57,7.59,1],['AT72',27.17,27.05,7.65,1],['SF34',19.73,21.44,6.97,1]
+];
+function libEntry(rec){
+  const [t,l,w,th,p]=rec, r1=v=>Math.round(v*10)/10;
+  return {AC_TYPE:t, LENGTH:l, WINGSPAN:w,
+    NOSE_TO_WING:r1(p?0.42*l:0.50*l),
+    NOSE_HEIGHT:r1(p?2.5:(w>50?5.0:(w>40?4.6:3.4))),
+    TAIL_HEIGHT:th,
+    WING_HEIGHT:r1(p?0.95*th:Math.max(5,0.40*th+2))};
+}
+/* Built-in master table extracted from manufacturer ACAPs; SOURCE records provenance and any estimate flags. */
+const MASTER_AIRCRAFT = [{"AC_TYPE":"A19N","LENGTH":33.84,"WINGSPAN":35.8,"NOSE_TO_WING":21.85,"NOSE_HEIGHT":4.26,"TAIL_HEIGHT":12.11,"WING_HEIGHT":6.81,"SOURCE":"ACAP jul26 verified (same airframe as A319 sharklet)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A20N","LENGTH":37.57,"WINGSPAN":35.8,"NOSE_TO_WING":23.45,"NOSE_HEIGHT":4.28,"TAIL_HEIGHT":12.08,"WING_HEIGHT":6.8,"SOURCE":"ACAP jul26 verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A21N","LENGTH":44.51,"WINGSPAN":35.8,"NOSE_TO_WING":27.72,"NOSE_HEIGHT":4.3,"TAIL_HEIGHT":12.1,"WING_HEIGHT":6.82,"SOURCE":"ACAP jul26 verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A306","LENGTH":54.08,"WINGSPAN":44.84,"NOSE_TO_WING":29.78,"NOSE_HEIGHT":4.7,"TAIL_HEIGHT":16.66,"WING_HEIGHT":6.35,"SOURCE":"ACAP dec09: TAIL verified; L/span published","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A310","LENGTH":46.66,"WINGSPAN":43.9,"NOSE_TO_WING":26.52,"NOSE_HEIGHT":4.5,"TAIL_HEIGHT":15.87,"WING_HEIGHT":6.1,"SOURCE":"ACAP dec09: TAIL verified (-300); L/span published","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A318","LENGTH":31.45,"WINGSPAN":34.1,"NOSE_TO_WING":20.07,"NOSE_HEIGHT":4.23,"TAIL_HEIGHT":12.89,"WING_HEIGHT":4.89,"SOURCE":"ACAP jul26 verified (wingtip fence config)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A319","LENGTH":33.84,"WINGSPAN":35.8,"NOSE_TO_WING":21.85,"NOSE_HEIGHT":4.26,"TAIL_HEIGHT":12.11,"WING_HEIGHT":6.81,"SOURCE":"ACAP jul26 verified (sharklet config; fence: span 34.10 N2W 20.86)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A320","LENGTH":37.57,"WINGSPAN":35.8,"NOSE_TO_WING":23.45,"NOSE_HEIGHT":4.28,"TAIL_HEIGHT":12.08,"WING_HEIGHT":6.8,"SOURCE":"ACAP jul26 verified (sharklet; fence: span 34.10 N2W 22.40)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A321","LENGTH":44.51,"WINGSPAN":35.8,"NOSE_TO_WING":27.72,"NOSE_HEIGHT":4.3,"TAIL_HEIGHT":12.1,"WING_HEIGHT":6.82,"SOURCE":"ACAP jul26 verified (sharklet; fence: span 34.10 N2W 26.72)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A332","LENGTH":58.82,"WINGSPAN":60.3,"NOSE_TO_WING":28.85,"NOSE_HEIGHT":5.43,"TAIL_HEIGHT":18.23,"WING_HEIGHT":8.08,"SOURCE":"ACAP dec25 verified (pax)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A332F","LENGTH":58.82,"WINGSPAN":60.3,"NOSE_TO_WING":28.85,"NOSE_HEIGHT":6.29,"TAIL_HEIGHT":17.41,"WING_HEIGHT":9.23,"SOURCE":"ACAP dec25 verified (freighter attitude)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A333","LENGTH":63.67,"WINGSPAN":60.3,"NOSE_TO_WING":32.05,"NOSE_HEIGHT":5.43,"TAIL_HEIGHT":17.18,"WING_HEIGHT":8.05,"SOURCE":"ACAP dec25 verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A342","LENGTH":59.42,"WINGSPAN":60.3,"NOSE_TO_WING":29.91,"NOSE_HEIGHT":5.4,"TAIL_HEIGHT":17.03,"WING_HEIGHT":7.95,"SOURCE":"ACAP dec25 verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A343","LENGTH":63.69,"WINGSPAN":60.3,"NOSE_TO_WING":32.05,"NOSE_HEIGHT":5.41,"TAIL_HEIGHT":16.99,"WING_HEIGHT":7.91,"SOURCE":"ACAP dec25 verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A345","LENGTH":67.93,"WINGSPAN":63.45,"NOSE_TO_WING":34.16,"NOSE_HEIGHT":5.87,"TAIL_HEIGHT":17.53,"WING_HEIGHT":7.81,"SOURCE":"ACAP verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A346","LENGTH":75.36,"WINGSPAN":63.45,"NOSE_TO_WING":39.46,"NOSE_HEIGHT":5.9,"TAIL_HEIGHT":17.93,"WING_HEIGHT":7.76,"SOURCE":"ACAP verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A350F","LENGTH":70.61,"WINGSPAN":64.75,"NOSE_TO_WING":29.31,"NOSE_HEIGHT":6.05,"TAIL_HEIGHT":17.52,"WING_HEIGHT":9.66,"SOURCE":"ACAP verified (A350-1000F; ICAO designator TBC pre-EIS)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A359","LENGTH":66.8,"WINGSPAN":64.75,"NOSE_TO_WING":28.66,"NOSE_HEIGHT":6.18,"TAIL_HEIGHT":17.47,"WING_HEIGHT":9.62,"SOURCE":"ACAP verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A35K","LENGTH":73.79,"WINGSPAN":64.75,"NOSE_TO_WING":32.48,"NOSE_HEIGHT":6.18,"TAIL_HEIGHT":17.41,"WING_HEIGHT":9.58,"SOURCE":"ACAP verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"A388","LENGTH":72.73,"WINGSPAN":79.75,"NOSE_TO_WING":33.58,"NOSE_HEIGHT":7.42,"TAIL_HEIGHT":24.27,"WING_HEIGHT":8.27,"SOURCE":"ACAP dec25 verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B37M","LENGTH":35.56,"WINGSPAN":35.92,"NOSE_TO_WING":21.51,"NOSE_HEIGHT":5.51,"TAIL_HEIGHT":12.5,"WING_HEIGHT":6.07,"SOURCE":"ACAP RevK: NOSE_H verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B38M","LENGTH":39.52,"WINGSPAN":35.92,"NOSE_TO_WING":23.74,"NOSE_HEIGHT":5.51,"TAIL_HEIGHT":12.45,"WING_HEIGHT":6.07,"SOURCE":"ACAP RevK: NOSE_H verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B39M","LENGTH":42.11,"WINGSPAN":35.92,"NOSE_TO_WING":25.32,"NOSE_HEIGHT":5.51,"TAIL_HEIGHT":12.4,"WING_HEIGHT":6.07,"SOURCE":"ACAP RevK: NOSE_H verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B3XM","LENGTH":43.79,"WINGSPAN":35.92,"NOSE_TO_WING":26.34,"NOSE_HEIGHT":5.54,"TAIL_HEIGHT":12.45,"WING_HEIGHT":6.07,"SOURCE":"ACAP RevK (737-10): NOSE_H verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B720","LENGTH":41.68,"WINGSPAN":39.88,"NOSE_TO_WING":24.0,"NOSE_HEIGHT":5.59,"TAIL_HEIGHT":12.62,"WING_HEIGHT":4.98,"SOURCE":"ACAP D6-58323: heights verified (J/H/N letters mapped from diagram)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B737","LENGTH":33.63,"WINGSPAN":35.79,"NOSE_TO_WING":21.18,"NOSE_HEIGHT":5.41,"TAIL_HEIGHT":12.62,"WING_HEIGHT":6.48,"SOURCE":"ACAP RevC: heights verified (winglet config); L/span published","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B738","LENGTH":39.47,"WINGSPAN":35.79,"NOSE_TO_WING":23.88,"NOSE_HEIGHT":5.41,"TAIL_HEIGHT":12.62,"WING_HEIGHT":6.5,"SOURCE":"ACAP RevC: heights verified (winglet)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B739","LENGTH":42.11,"WINGSPAN":35.79,"NOSE_TO_WING":25.45,"NOSE_HEIGHT":5.41,"TAIL_HEIGHT":12.62,"WING_HEIGHT":6.5,"SOURCE":"ACAP RevC: heights verified (winglet)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B744","LENGTH":70.66,"WINGSPAN":64.44,"NOSE_TO_WING":46.51,"NOSE_HEIGHT":8.9,"TAIL_HEIGHT":19.51,"WING_HEIGHT":7.32,"SOURCE":"ACAP RevF: TAIL verified; L/span published","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B748","LENGTH":76.25,"WINGSPAN":68.4,"NOSE_TO_WING":51.94,"NOSE_HEIGHT":8.9,"TAIL_HEIGHT":19.56,"WING_HEIGHT":6.8,"SOURCE":"ACAP RevE: TAIL verified (F)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B752","LENGTH":47.32,"WINGSPAN":38.05,"NOSE_TO_WING":27.0,"NOSE_HEIGHT":4.5,"TAIL_HEIGHT":13.74,"WING_HEIGHT":4.9,"SOURCE":"ACAP RevH: TAIL verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B753","LENGTH":54.43,"WINGSPAN":38.06,"NOSE_TO_WING":31.0,"NOSE_HEIGHT":4.5,"TAIL_HEIGHT":13.64,"WING_HEIGHT":5.03,"SOURCE":"ACAP RevH: TAIL verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B762","LENGTH":48.51,"WINGSPAN":47.57,"NOSE_TO_WING":30.4,"NOSE_HEIGHT":5.5,"TAIL_HEIGHT":16.13,"WING_HEIGHT":5.56,"SOURCE":"ACAP RevK: TAIL verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B763","LENGTH":54.94,"WINGSPAN":47.57,"NOSE_TO_WING":32.87,"NOSE_HEIGHT":5.5,"TAIL_HEIGHT":16.13,"WING_HEIGHT":5.56,"SOURCE":"ACAP RevK: TAIL verified (freighter value)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B764","LENGTH":61.37,"WINGSPAN":51.92,"NOSE_TO_WING":40.72,"NOSE_HEIGHT":5.5,"TAIL_HEIGHT":17.01,"WING_HEIGHT":6.51,"SOURCE":"ACAP RevK: TAIL+L/span verified; N2W 40.72 from dims figure (verify arrow datum)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B772","LENGTH":63.73,"WINGSPAN":60.93,"NOSE_TO_WING":39.94,"NOSE_HEIGHT":6.2,"TAIL_HEIGHT":18.76,"WING_HEIGHT":7.49,"SOURCE":"ACAP RevE: TAIL verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B773","LENGTH":73.86,"WINGSPAN":60.93,"NOSE_TO_WING":45.26,"NOSE_HEIGHT":6.2,"TAIL_HEIGHT":18.76,"WING_HEIGHT":7.49,"SOURCE":"ACAP RevE: TAIL verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B779","LENGTH":76.73,"WINGSPAN":71.76,"NOSE_TO_WING":46.0,"NOSE_HEIGHT":6.3,"TAIL_HEIGHT":19.53,"WING_HEIGHT":11.38,"SOURCE":"ACAP RevG: TAIL from dims callout; span=FOLDED taxi config - folded tips add height at fold station - VERIFY","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B77L","LENGTH":63.73,"WINGSPAN":64.8,"NOSE_TO_WING":43.17,"NOSE_HEIGHT":6.2,"TAIL_HEIGHT":18.99,"WING_HEIGHT":7.9,"SOURCE":"ACAP RevG: TAIL verified (max incl 777F)","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B77W","LENGTH":73.86,"WINGSPAN":64.8,"NOSE_TO_WING":48.5,"NOSE_HEIGHT":6.2,"TAIL_HEIGHT":18.85,"WING_HEIGHT":7.9,"SOURCE":"ACAP RevG: TAIL verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B788","LENGTH":56.72,"WINGSPAN":60.12,"NOSE_TO_WING":37.69,"NOSE_HEIGHT":5.9,"TAIL_HEIGHT":17.09,"WING_HEIGHT":7.75,"SOURCE":"ACAP RevQ: TAIL verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B789","LENGTH":62.81,"WINGSPAN":60.12,"NOSE_TO_WING":40.69,"NOSE_HEIGHT":5.9,"TAIL_HEIGHT":17.09,"WING_HEIGHT":7.77,"SOURCE":"ACAP RevQ: TAIL verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""},{"AC_TYPE":"B78X","LENGTH":68.3,"WINGSPAN":60.12,"NOSE_TO_WING":43.35,"NOSE_HEIGHT":5.9,"TAIL_HEIGHT":17.02,"WING_HEIGHT":7.9,"SOURCE":"ACAP RevQ: TAIL verified","VERIFIED":"NO","CHECKED_BY":"","CHECKED_DATE":""}];
+const AC_STORE='am_library_overrides_v1';
+/* Shared aircraft-data service. Set to your Railway URL after deploying.
+   Falls back to the built-in MASTER_AIRCRAFT if unreachable (offline-safe). */
+const AIRCRAFT_API = (window.AIRCRAFT_API_URL || "https://aircraft-modelling.up.railway.app").replace(/\/$/,"");
+let AC_MASTER = MASTER_AIRCRAFT.slice();   // replaced by the live list on load
+let AC_SERVICE_OK = false;
+async function acApi(path, opts){
+  const r = await fetch(AIRCRAFT_API+path, Object.assign({headers:{"Content-Type":"application/json"}}, opts||{},
+    opts&&opts.body?{body:JSON.stringify(opts.body)}:{}));
+  if(!r.ok){ let d={}; try{d=await r.json();}catch(e){} throw new Error(d.detail||r.statusText); }
+  return r.json();
+}
+async function loadAircraftMaster(){
+  try{
+    const d = await acApi("/api/aircraft");
+    AC_MASTER = d.aircraft;
+    AC_SERVICE_OK = true;
+    log(`Aircraft data: ${AC_MASTER.length} types loaded live from the shared service. Sign-offs are shared with the whole team.`,'ok');
+  }catch(e){
+    AC_MASTER = MASTER_AIRCRAFT.slice();
+    AC_SERVICE_OK = false;
+    log('Aircraft data service unreachable \u2014 using the built-in list offline. Sign-offs will not be shared until reconnected.','warn');
+  }
+}
+let AC_OVERRIDES={};
+try{ AC_OVERRIDES = JSON.parse(localStorage.getItem(AC_STORE)) || {}; }catch(e){ AC_OVERRIDES={}; }
+function persistOverrides(){ try{ localStorage.setItem(AC_STORE, JSON.stringify(AC_OVERRIDES)); }catch(e){} }
+function persistAc(row){
+  if(!row) return;
+  const t=String(row.AC_TYPE||'').trim().toUpperCase();
+  if(t.length>=3 && t!=='NEW'){ AC_OVERRIDES[t]={...row, AC_TYPE:t}; persistOverrides(); }
+}
+function libRow(t){
+  const m=AC_MASTER.find(a=>a.AC_TYPE===t); if(m) return {...m};
+  if(AC_OVERRIDES[t]) return {...AC_OVERRIDES[t]};
+  const l=AC_LIBRARY.find(a=>a[0]===t);
+  if(l){ const e=libEntry(l); e.SOURCE='library estimate \u2014 verify vs ACAP'; return e; }
+  return null;
+}
+S.aircraft = [];
+if(Object.keys(AC_OVERRIDES).length) log('Library corrections active for: '+Object.keys(AC_OVERRIDES).sort().join(', '));
+const AC_FIELDS=['AC_TYPE','LENGTH','WINGSPAN','NOSE_TO_WING','NOSE_HEIGHT','TAIL_HEIGHT','WING_HEIGHT'];
+function renderAcTable(){
+  const tb=$('acTable').querySelector('tbody'); tb.innerHTML='';
+  S.aircraft.forEach((a,i)=>{
+    const tr=document.createElement('tr');
+    const ver = String(a.VERIFIED||'NO').toUpperCase()==='YES';
+    const local = ver && a._local;
+    tr.innerHTML = AC_FIELDS.map(f=>`<td><input data-f="${f}" value="${a[f]}"></td>`).join('')
+      + `<td><button class="mini danger" title="Remove from this project">\u00d7</button></td>`;
+    if(!ver) tr.className='unver';
+    tr.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',e=>{
+      const f=e.target.dataset.f;
+      const before=a[f];
+      a[f] = f==='AC_TYPE'? e.target.value.trim().toUpperCase() : parseFloat(e.target.value);
+      if(f!=='AC_TYPE' && a[f]!==before && String(a.VERIFIED||'').toUpperCase()==='YES'){
+        a.VERIFIED='NO'; a.CHECKED_BY=''; a.CHECKED_DATE=''; delete a._local;
+        log(`${a.AC_TYPE}: ${f} edited \u2014 sign-off cleared, this type must be re-checked before generating.`,'warn');
+        setTimeout(()=>{renderAcTable();refreshGenState();},0);
+      }
+      if(f==='AC_TYPE') renderRoutes();
+      persistAc(a); refreshGenState();
+      // push the dimension change to the shared service (debounced), keeps everyone in sync
+      if(AC_SERVICE_OK && f!=='AC_TYPE' && a[f]!==before){
+        clearTimeout(a._push); a._push=setTimeout(async()=>{
+          try{ const upd=await acApi(`/api/aircraft/${encodeURIComponent(a.AC_TYPE)}`,{method:'PUT',
+            body:{AC_TYPE:a.AC_TYPE, LENGTH:a.LENGTH, WINGSPAN:a.WINGSPAN, NOSE_TO_WING:a.NOSE_TO_WING,
+              NOSE_HEIGHT:a.NOSE_HEIGHT, TAIL_HEIGHT:a.TAIL_HEIGHT, WING_HEIGHT:a.WING_HEIGHT,
+              SOURCE:a.SOURCE||'', who:(a.CHECKED_BY||'?')}});
+            const m=AC_MASTER.find(x=>x.AC_TYPE===a.AC_TYPE); if(m) Object.assign(m, upd);
+          }catch(e){ log(`Could not save ${a.AC_TYPE} to the service: ${e.message}`,'warn'); }
+        }, 800);
+      }
+    }));
+    tr.querySelector('button').addEventListener('click',()=>{S.aircraft.splice(i,1);renderAcTable();renderRoutes();refreshGenState();});
+    tb.appendChild(tr);
+
+    const vr=document.createElement('tr'); vr.className='vrow';
+    const tag = !ver ? '<span class="vtag no">NOT CHECKED</span>'
+      : `<span class="vtag ${local?'local':'yes'}">${local?'LOCAL \u2713':'\u2713'} ${a.CHECKED_BY||''} ${a.CHECKED_DATE||''}</span>`;
+    vr.innerHTML = `<td colspan="8"><div class="inner">${tag}`
+      + (ver ? '<button class="mini vclr">Clear sign-off</button>' : '<button class="mini vchk">Mark as checked</button>')
+      + `<span class="src">${a.SOURCE||''}</span></div></td>`;
+    const vb=vr.querySelector('.vchk');
+    if(vb) vb.addEventListener('click',async ()=>{
+      const who=prompt(`Confirm you have checked ALL dimensions for ${a.AC_TYPE} against the manufacturer's ACAP.\n\nSource on record: ${a.SOURCE||'n/a'}\n\nEnter your initials to sign off:`);
+      if(!who||!who.trim()) return;
+      const ini=who.trim().toUpperCase();
+      if(AC_SERVICE_OK){
+        try{
+          const upd=await acApi(`/api/aircraft/${encodeURIComponent(a.AC_TYPE)}/verify`,{method:'POST',body:{who:ini}});
+          Object.assign(a, upd); delete a._local;
+          const m=AC_MASTER.find(x=>x.AC_TYPE===a.AC_TYPE); if(m) Object.assign(m, upd);
+          renderAcTable(); refreshGenState(); renderLibSelect();
+          log(`${a.AC_TYPE} signed off by ${ini} \u2014 now verified for the whole team.`,'ok');
+        }catch(e){ log(`Could not record sign-off on the service: ${e.message}`,'warn'); }
+        return;
+      }
+      a.VERIFIED='YES'; a.CHECKED_BY=ini; a.CHECKED_DATE=new Date().toISOString().slice(0,10); a._local=true;
+      persistAc(a); renderAcTable(); refreshGenState(); renderLibSelect();
+      log(`${a.AC_TYPE} signed off by ${ini} (offline \u2014 not shared; reconnect to the service to publish).`,'warn');
+    });
+    const vc=vr.querySelector('.vclr');
+    if(vc) vc.addEventListener('click',async ()=>{
+      if(AC_SERVICE_OK){
+        try{
+          const upd=await acApi(`/api/aircraft/${encodeURIComponent(a.AC_TYPE)}/verify?who=${encodeURIComponent((a.CHECKED_BY||'?'))}`,{method:'DELETE'});
+          Object.assign(a, upd); const m=AC_MASTER.find(x=>x.AC_TYPE===a.AC_TYPE); if(m) Object.assign(m, upd);
+          renderAcTable(); refreshGenState(); renderLibSelect();
+          log(`${a.AC_TYPE}: sign-off cleared for the whole team.`,'warn');
+        }catch(e){ log(`Could not clear sign-off on the service: ${e.message}`,'warn'); }
+        return;
+      }
+      a.VERIFIED='NO'; a.CHECKED_BY=''; a.CHECKED_DATE=''; delete a._local;
+      persistAc(a); renderAcTable(); refreshGenState(); renderLibSelect();
+      log(`${a.AC_TYPE}: sign-off cleared (offline).`,'warn');
+    });
+    tb.appendChild(vr);
+  });
+  $('t4').textContent = S.aircraft.length+' types';
+}
+$('btnAddAc').addEventListener('click',()=>{S.aircraft.push({AC_TYPE:'NEW',LENGTH:0,WINGSPAN:0,NOSE_TO_WING:0,NOSE_HEIGHT:0,TAIL_HEIGHT:0,WING_HEIGHT:0,SOURCE:'user entry'});renderAcTable();});
+renderAcTable();
+function renderLibSelect(){
+  const types=[...new Set([...AC_MASTER.map(a=>a.AC_TYPE), ...AC_LIBRARY.map(a=>a[0]), ...Object.keys(AC_OVERRIDES)])].sort();
+  $('libSelect').innerHTML = types.map(t=>{
+    const r=libRow(t);
+    const est=/ESTIMAT|estimate/.test(r.SOURCE||'') ? ' \u00b7 est' : '';
+    const vv=String(r.VERIFIED||'NO').toUpperCase()==='YES' ? ' \u00b7 \u2713'+(r.CHECKED_BY?' '+r.CHECKED_BY:'') : ' \u00b7 unchecked';
+    return `<option value="${t}">${t} \u2014 ${(+r.LENGTH).toFixed(1)} \u00d7 ${(+r.WINGSPAN).toFixed(1)} m${est}${vv}</option>`;
+  }).join('');
+}
+renderLibSelect();
+// Pull the shared aircraft data on load, then refresh views with live verification.
+loadAircraftMaster().then(()=>{ renderLibSelect(); if(S.aircraft.length) renderAcTable(); refreshGenState&&refreshGenState(); });
+$('btnLibAdd').addEventListener('click',()=>{
+  const t=$('libSelect').value;
+  if(S.aircraft.some(a=>a.AC_TYPE===t)){ log(`${t} is already in the table.`,'warn'); return; }
+  const le=libRow(t);
+  S.aircraft.push(le);
+  renderAcTable(); renderRoutes(); refreshGenState();
+  log(`${t} added. Source: ${le.SOURCE||'n/a'}`, /ESTIMAT|estimate/.test(le.SOURCE||'')?'warn':'ok');
+});
+$('btnAcExport').addEventListener('click',()=>{
+  const cols=[...AC_FIELDS,'VERIFIED','CHECKED_BY','CHECKED_DATE','SOURCE'];
+  const csv = cols.join(',')+'\n'+S.aircraft.map(a=>cols.map(f=>{const v=a[f]??'';return String(v).includes(',')?'"'+v+'"':v;}).join(',')).join('\n')+'\n';
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download='aircraft_table.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+});
+$('acCsvFile').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const lines=(await f.text()).split(/\r?\n/).filter(l=>l.trim());
+    const hdr=lines[0].split(',').map(s=>s.trim().toUpperCase());
+    const idx=AC_FIELDS.map(fl=>hdr.indexOf(fl));
+    if(idx[0]<0) throw new Error('Header must contain '+AC_FIELDS.join(','));
+    let added=0,updated=0;
+    for(let i=1;i<lines.length;i++){
+      const c=lines[i].split(',');
+      const rec={}; AC_FIELDS.forEach((fl,k)=>{ rec[fl]= k===0? String(c[idx[k]]||'').trim().toUpperCase() : parseFloat(c[idx[k]]); });
+      if(!rec.AC_TYPE) continue;
+      for(const extra of ['VERIFIED','CHECKED_BY','CHECKED_DATE']){
+        const xi=hdr.indexOf(extra);
+        if(xi>=0 && c[xi]!==undefined) rec[extra]=String(c[xi]).trim().replace(/^"|"$/g,'');
+      }
+      if(!rec.VERIFIED) rec.VERIFIED='NO';
+      const si=hdr.indexOf('SOURCE');
+      if(si>=0 && c[si]!==undefined) rec.SOURCE=c.slice(si).join(',').replace(/^"|"$/g,'');
+      const ex=S.aircraft.find(a=>a.AC_TYPE===rec.AC_TYPE);
+      if(ex){ Object.assign(ex,rec); updated++; persistAc(ex); } else { S.aircraft.push(rec); added++; persistAc(rec); }
+    }
+    renderAcTable(); renderRoutes(); refreshGenState(); renderLibSelect();
+    log(`Aircraft table CSV: ${added} added, ${updated} updated.`,'ok');
+  }catch(err){ log('Aircraft CSV import failed: '+err.message,'err'); }
+  e.target.value='';
+});
+
+$('btnAcRevert').addEventListener('click',()=>{
+  if(!confirm('Discard all locally stored library corrections? The built-in ACAP values will be used for every type. The current project table is not changed.')) return;
+  AC_OVERRIDES={}; try{ localStorage.removeItem(AC_STORE); localStorage.removeItem('am_aircraft_v1'); }catch(e){}
+  renderLibSelect();
+  log('Library corrections cleared \u2014 built-in ACAP data restored for Add from library.','ok');
+});
+
+/* ================= generation ================= */
+function unverifiedInUse(){
+  const bad=new Set();
+  for(const r of S.routes){
+    if(!r.acType) continue;
+    const a=S.aircraft.find(x=>x.AC_TYPE===r.acType);
+    if(!a || String(a.VERIFIED||'NO').toUpperCase()!=='YES') bad.add(r.acType);
+  }
+  return [...bad];
+}
+function refreshGenState(){
+  const assigned = S.routes.some(r=>r.acType);
+  const bad = unverifiedInUse();
+  const box=$('gateMsg');
+  if(bad.length){
+    box.className='on';
+    box.innerHTML = `<b>Generation blocked \u2014 unchecked aircraft data.</b><br>`+
+      `These types are assigned to routes but their dimensions have not been signed off: <b>${bad.join(', ')}</b>.<br>`+
+      `Verify each against the manufacturer's ACAP, then use <b>Mark checked</b> in the Aircraft types section.`;
+  } else box.className='';
+  $('btnGen').disabled = !(S.holds.length && assigned && !bad.length);
+}
+function nearestHold(x,y){
+  let best=null,bd=Infinity;
+  for(const h of S.holds){ const d=Math.hypot(h.x-x,h.y-y); if(d<bd){bd=d;best=h;} }
+  return {hold:best,dist:bd};
+}
+function polyXY(r){ return densifyRoute(r).map(p=>toXY(p)); }
+function cumLen(xy){ const c=[0]; for(let i=1;i<xy.length;i++) c.push(c[i-1]+Math.hypot(xy[i][0]-xy[i-1][0],xy[i][1]-xy[i-1][1])); return c; }
+function pointAt(xy,cum,d){
+  const total=cum[cum.length-1]; d=Math.max(0,Math.min(d,total));
+  let i=1; while(i<cum.length&&cum[i]<d) i++;
+  if(i>=cum.length) i=cum.length-1;
+  const t=(d-cum[i-1])/((cum[i]-cum[i-1])||1);
+  return [xy[i-1][0]+t*(xy[i][0]-xy[i-1][0]), xy[i-1][1]+t*(xy[i][1]-xy[i-1][1])];
+}
+$('btnGen').addEventListener('click',()=>{
+  const radius=parseFloat($('inRadius').value)||0, gap=parseFloat($('inGap').value)||0, holdTol=parseFloat($('inHoldTol').value)||1;
+  S.results=[]; S.idCounter=1; lyrOut.clearLayers();
+  let warned=0;
+  for(const r of S.routes){
+    if(!r.acType) continue;
+    const ac=S.aircraft.find(a=>a.AC_TYPE===r.acType);
+    if(!ac){log(`Route "${r.name}": aircraft ${r.acType} not in table — skipped`,'warn');continue;}
+    const xy=polyXY(r), cum=cumLen(xy), total=cum[cum.length-1];
+    if(total<1){log(`Route "${r.name}": zero length — skipped`,'warn');continue;}
+    const spacing = ac.LENGTH + gap;
+    const layerVal = `${r.runway}_${r.category}_${ac.AC_TYPE}`;
+    const placeAt=(d)=>{
+      const nose=pointAt(xy,cum,d);
+      const a=pointAt(xy,cum,Math.max(d-0.5,0)), b=pointAt(xy,cum,Math.min(d+0.5,total));
+      let hx=b[0]-a[0], hy=b[1]-a[1]; const hl=Math.hypot(hx,hy)||1; hx/=hl; hy/=hl; // unit travel dir
+      const tail=[nose[0]-ac.LENGTH*hx, nose[1]-ac.LENGTH*hy];
+      const wr=[nose[0]-ac.NOSE_TO_WING*hx, nose[1]-ac.NOSE_TO_WING*hy];
+      const px=-hy, py=hx; // left perpendicular
+      const wingL=[wr[0]+(ac.WINGSPAN/2)*px, wr[1]+(ac.WINGSPAN/2)*py];
+      const wingR=[wr[0]-(ac.WINGSPAN/2)*px, wr[1]-(ac.WINGSPAN/2)*py];
+      const nh=nearestHold(nose[0],nose[1]);
+      if(!nh.hold) return;
+      const brg=(Math.atan2(hx,hy)*180/Math.PI+360)%360;
+      if(nh.dist>500&&!warned){log('Some stations are >500 m from any HOLD — elevation uses nearest hold; check applicability.','warn');warned=1;}
+      const baseElev=nh.hold.ortho;
+      const descId = nh.dist<=holdTol ? nh.hold.id : 'TXY';
+      for(const [lbl,pt,off] of [['ns',nose,ac.NOSE_HEIGHT],['tl',tail,ac.TAIL_HEIGHT],['wL',wingL,ac.WING_HEIGHT],['wR',wingR,ac.WING_HEIGHT]]){
+        const ll=toLL(pt);
+        S.results.push({
+          IDENTIFIER:`AM${String(S.idCounter++).padStart(3,'0')}`,
+          DESCRIPTION:`${ac.AC_TYPE}_${lbl}_${descId}`,
+          LATITUDE:ll.lat.toFixed(8), LONGITUDE:ll.lng.toFixed(8),
+          ELEVATION:(baseElev+off).toFixed(2), ELEVATIONUNITS:'m',
+          RADIUS:radius, RADIUSUNITS:'m',
+          LAYER:layerVal, NEAREST:nh.hold.rec, _lbl:lbl,
+          _route:r.name, _ac:ac.AC_TYPE, _d:d, _hdg:brg,
+          _holdId:nh.hold.id, _holdDist:nh.dist
+        });
+      }
+      // footprint preview: fuselage + wing line
+      L.polyline([toLL(nose),toLL(tail)],{color:'#fff',weight:1.2,opacity:.7}).addTo(lyrOut);
+      L.polyline([toLL(wingL),toLL(wingR)],{color:'#fff',weight:1.2,opacity:.7}).addTo(lyrOut);
+    };
+    // Anchor an aircraft at every hold lying on this route (nose on the hold),
+    // then pack taxiing aircraft into the remaining gaps where separation allows.
+    const anchorTol=Math.max(2.0,holdTol);
+    const anchors=[];
+    for(const hd of S.holds){
+      let best={d:Infinity,ch:0};
+      for(let i=1;i<xy.length;i++){
+        const ax=xy[i-1][0],ay=xy[i-1][1],bx=xy[i][0],by=xy[i][1];
+        const vx=bx-ax,vy=by-ay,len2=vx*vx+vy*vy;
+        let t=len2?((hd.x-ax)*vx+(hd.y-ay)*vy)/len2:0; t=Math.max(0,Math.min(1,t));
+        const px=ax+t*vx,py=ay+t*vy;
+        const dd=Math.hypot(hd.x-px,hd.y-py);
+        if(dd<best.d) best={d:dd,ch:cum[i-1]+t*(cum[i]-cum[i-1])};
+      }
+      if(best.d<=anchorTol) anchors.push(best.ch);
+    }
+    anchors.sort((a,b)=>a-b);
+    const stations=[];
+    if(!anchors.length){
+      for(let d=0; d<total; d+=spacing) stations.push(d);
+    } else {
+      stations.push(...anchors);
+      for(let n=anchors[0]-spacing; n>=ac.LENGTH; n-=spacing) stations.push(n);
+      for(let i=0;i<anchors.length-1;i++)
+        for(let n=anchors[i+1]-spacing; n>=anchors[i]+spacing-1e-6; n-=spacing) stations.push(n);
+      for(let n=anchors[anchors.length-1]+spacing; n<=total; n+=spacing) stations.push(n);
+    }
+    stations.sort((a,b)=>a-b);
+    for(const d of stations) placeAt(d);
+    if(anchors.length) log(`${r.name}: ${anchors.length} aircraft anchored at holds, ${stations.length-anchors.length} taxiing in gaps`);
+  }
+  const colr={ns:'#ffffff',tl:'#f2c744',wL:'#54c8dd',wR:'#54c8dd'};
+  for(const p of S.results){
+    L.circleMarker([+p.LATITUDE,+p.LONGITUDE],{radius:3,weight:1,color:'#000',fillColor:colr[p._lbl],fillOpacity:1})
+      .bindTooltip(`${p.IDENTIFIER} · ${p.DESCRIPTION}<br>${p.ELEVATION} m · hold rec ${p.NEAREST}`,{className:'hold-label'}).addTo(lyrOut);
+  }
+  $('genStats').textContent = `${S.results.length} points`;
+  $('t5').textContent = S.results.length? '✓':'—'; if(S.results.length)$('t5').classList.add('done');
+  log(`Generated ${S.results.length} obstacle points across ${new Set(S.results.map(p=>p.LAYER)).size} layer(s)`,'ok');
+  buildExportButtons();
+});
+
+/* ================= export ================= */
+const CSV_COLS=['IDENTIFIER','DESCRIPTION','LATITUDE','LONGITUDE','ELEVATION','ELEVATIONUNITS','RADIUS','RADIUSUNITS','NEAREST'];
+function groups(){
+  const g={};
+  for(const p of S.results||[]){
+    const parts=String(p.LAYER).split('_');
+    const key = parts.length>=2? `${parts[0]}_${parts[1]}` : p.LAYER;
+    (g[key]=g[key]||[]).push(p);
+  }
+  return g;
+}
+function csvFor(rows){ return CSV_COLS.join(',')+'\n'+rows.map(r=>CSV_COLS.map(c=>r[c]).join(',')).join('\n')+'\n'; }
+function download(name,text){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'})); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+function buildExportButtons(){
+  const g=groups(); const box=$('groupBtns'); box.innerHTML='';
+  $('exportRow').style.display = Object.keys(g).length? 'flex':'none';
+  for(const key of Object.keys(g)){
+    const b=document.createElement('button'); b.className='mini'; b.textContent=`${key}.csv (${g[key].length})`;
+    b.addEventListener('click',()=>download(`${key}.csv`,csvFor(g[key])));
+    box.appendChild(b);
+  }
+}
+$('btnXlsx').addEventListener('click',()=>{
+  if(!S.results||!S.results.length) return;
+  const wb=XLSX.utils.book_new();
+  // --- Params sheet ---
+  const meta=[['AIRCRAFT MODELLING \u2014 VALIDATION WORKBOOK',''],
+    ['Generated',new Date().toISOString()],
+    ['Aerodrome',S.meta['AerodromeIdent']||''],
+    ['Survey process date',S.meta['SurveyProcessDate']||''],
+    ['Survey originator',S.meta['DataOriginatorCompany']||''],
+    ['Survey coordinate system',S.meta['CoordinateSystem']||''],
+    ['Radius (m)',+$('inRadius').value],
+    ['Gap between aircraft (m)',+$('inGap').value],
+    ['Hold match tolerance (m)',+$('inHoldTol').value],
+    ['',''],
+    ['Tool version', ($('verStamp')?$('verStamp').textContent:'')],
+    ['Aircraft data check','All types used below were signed off as checked \u2014 see Aircraft sheet for checker and date.'],
+    ['Method','Station placed along route; nose/tail/wingtips from aircraft dimensions and local heading.'],
+    ['','ELEVATION = orthometric height of NEAREST surveyed HOLD + aircraft PART height.'],
+    ['','Columns O\u2013S on the Points sheet re-derive this with live INDEX/MATCH formulas.'],
+    ['',''],
+    ['Routes generated','aircraft / group / length m']];
+  for(const rt of S.routes) if(rt.acType) meta.push([rt.name, rt.acType+' / '+rt.runway+'_'+rt.category+' / '+routeLength(rt).toFixed(0)]);
+  const wsP=XLSX.utils.aoa_to_sheet(meta); wsP['!cols']=[{wch:26},{wch:80}];
+  XLSX.utils.book_append_sheet(wb,wsP,'Params');
+  // --- Aircraft sheet ---
+  const acHdr=['AC_TYPE','LENGTH','WINGSPAN','NOSE_TO_WING','NOSE_HEIGHT','TAIL_HEIGHT','WING_HEIGHT','VERIFIED','CHECKED_BY','CHECKED_DATE','SOURCE'];
+  const wsA=XLSX.utils.aoa_to_sheet([acHdr,...S.aircraft.map(a=>acHdr.map(f=>a[f]??''))]);
+  wsA['!cols']=acHdr.map(x=>({wch:x==='SOURCE'?60:13}));
+  XLSX.utils.book_append_sheet(wb,wsA,'Aircraft');
+  // --- Holds sheet ---
+  const wsH=XLSX.utils.aoa_to_sheet([['HOLD_ID','TAXIWAY','LATITUDE','LONGITUDE','ORTHO_HEIGHT_M','RECORD_ID'],
+    ...S.holds.map(hd=>[hd.id,hd.assoc,hd.lat,hd.lon,hd.ortho,hd.rec])]);
+  wsH['!cols']=[{wch:10},{wch:9},{wch:12},{wch:12},{wch:15},{wch:11}];
+  XLSX.utils.book_append_sheet(wb,wsH,'Holds');
+  // --- Points sheet with derivation formulas ---
+  const pHdr=['IDENTIFIER','DESCRIPTION','ROUTE','LAYER','AC_TYPE','PART','PART_DIMENSION',
+    'STATION_M','HEADING_DEG','LATITUDE','LONGITUDE','NEAREST_HOLD_ID','NEAREST_HOLD_REC',
+    'DIST_NOSE_TO_HOLD_M','HOLD_ORTHO_M','PART_HEIGHT_M','ELEV_CALCULATED_M','ELEV_TOOL_M','CHECK','RADIUS_M'];
+  const dimName={ns:'NOSE_HEIGHT',tl:'TAIL_HEIGHT',wL:'WING_HEIGHT',wR:'WING_HEIGHT'};
+  const rowsA=[pHdr];
+  for(const p of S.results){
+    rowsA.push([p.IDENTIFIER,p.DESCRIPTION,p._route,p.LAYER,p._ac,p._lbl,dimName[p._lbl],
+      +p._d.toFixed(2),+p._hdg.toFixed(2),+p.LATITUDE,+p.LONGITUDE,
+      p._holdId,p.NEAREST,+p._holdDist.toFixed(2),null,null,null,+p.ELEVATION,null,+p.RADIUS]);
+  }
+  const ws=XLSX.utils.aoa_to_sheet(rowsA);
+  const nH=S.holds.length+1, nA=S.aircraft.length+1;
+  for(let i=0;i<S.results.length;i++){
+    const rr=i+2;
+    ws['O'+rr]={t:'n',f:'INDEX(Holds!$E$2:$E$'+nH+',MATCH($L'+rr+',Holds!$A$2:$A$'+nH+',0))'};
+    ws['P'+rr]={t:'n',f:'INDEX(Aircraft!$A$1:$G$'+nA+',MATCH($E'+rr+',Aircraft!$A$1:$A$'+nA+',0),MATCH($G'+rr+',Aircraft!$A$1:$G$1,0))'};
+    ws['Q'+rr]={t:'n',f:'ROUND(O'+rr+'+P'+rr+',2)'};
+    ws['S'+rr]={t:'s',f:'IF(ABS(Q'+rr+'-R'+rr+')<0.005,"OK","CHECK")'};
+  }
+  ws['!cols']=pHdr.map(x=>({wch:Math.max(11,x.length+2)}));
+  XLSX.utils.book_append_sheet(wb,ws,'Points');
+  XLSX.writeFile(wb,'validation_'+(S.meta['AerodromeIdent']||'output')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  log('Validation workbook exported: '+S.results.length+' points. Columns O\u2013Q re-derive each elevation with live formulas; CHECK flags any mismatch vs the tool.','ok');
+});
+
+$('btnZip').addEventListener('click',async()=>{
+  const g=groups(); const zip=new JSZip();
+  for(const key of Object.keys(g)) zip.file(`${key}.csv`,csvFor(g[key]));
+  const meta = `Generated ${new Date().toISOString()}\nAerodrome: ${S.meta['AerodromeIdent']||'?'}\nSurvey: ${S.meta['SurveyProcessDate']||'?'} (${S.meta['DataOriginatorCompany']||'?'})\nRadius: ${$('inRadius').value} m · Gap: ${$('inGap').value} m\nRoutes:\n`+S.routes.filter(r=>r.acType).map(r=>` - ${r.name}: ${r.acType}, ${r.runway}_${r.category}, ${routeLength(r).toFixed(0)} m`).join('\n');
+  zip.file('_generation_record.txt',meta);
+  const blob=await zip.generateAsync({type:'blob'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`aircraft_modelling_${S.meta['AerodromeIdent']||'output'}.zip`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+});
+$('btnResetAll').addEventListener('click',()=>{
+  if(!confirm('Reset the whole tool? This clears the survey data, routes, generated points and aircraft table edits, returning to a fresh start. Save the project first if you want to keep the routes.')) return;
+  location.reload();
+});
+$('btnClearRoutes').addEventListener('click',()=>{
+  if(!S.routes.length) return;
+  if(!confirm(`Delete all ${S.routes.length} route(s) and any generated obstacle points? Survey data and the aircraft table are kept. Consider saving the project first.`)) return;
+  S.routes=[]; S.selRoute=null; S.results=null;
+  lyrRoutes.clearLayers(); lyrEdit.clearLayers(); lyrOut.clearLayers();
+  Object.keys(routePolys).forEach(k=>delete routePolys[k]);
+  $('genStats').textContent=''; $('exportRow').style.display='none';
+  $('t2').textContent='\u2014'; $('t2').classList.remove('done');
+  $('t5').textContent='\u2014'; $('t5').classList.remove('done');
+  renderRoutes(); refreshGenState();
+  log('All routes cleared. Survey data and aircraft table retained \u2014 reload the page for a full reset.','ok');
+});
+
+/* ================= project save / load ================= */
+$('btnSaveProj').addEventListener('click',()=>{
+  const strip=f=>({type:f.type,id:f.id,assoc:f.assoc,lat:f.lat,lon:f.lon,ortho:f.ortho,rec:f.rec});
+  const proj={version:2, saved:new Date().toISOString(), aerodrome:S.meta['AerodromeIdent']||null,
+    routes:S.routes.map(r=>({name:r.name,pts:r.pts,arcs:r.arcs,acType:r.acType,runway:r.runway,category:r.category,visible:r.visible})),
+    aircraft:S.aircraft,
+    params:{radius:$('inRadius').value, gap:$('inGap').value, holdTol:$('inHoldTol').value},
+    survey: S.holds.length ? {meta:S.meta, holds:S.holds.map(strip), stands:S.stands.map(strip), rwyPts:S.rwyPts.map(strip)} : null};
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(proj,null,1)],{type:'application/json'}));
+  a.download=`aircraft_modelling_project_${proj.aerodrome||'untitled'}.json`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+  log(S.holds.length ? 'Project saved: survey data, routes, arcs, aircraft table and parameters all embedded \u2014 this one file restores the full session.' : 'Project saved (no survey loaded \u2014 routes, aircraft table and parameters only).','ok');
+});
+$('projFile').addEventListener('change',async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const p=JSON.parse(await f.text());
+    if(p.aircraft){ S.aircraft=p.aircraft; renderAcTable(); }
+    if(p.params){ $('inRadius').value=p.params.radius; $('inGap').value=p.params.gap; $('inHoldTol').value=p.params.holdTol; }
+    if(p.survey && p.survey.holds && p.survey.holds.length){
+      S.meta=p.survey.meta||{};
+      S.holds=p.survey.holds.map(f=>({...f}));
+      S.stands=(p.survey.stands||[]).map(f=>({...f}));
+      S.rwyPts=(p.survey.rwyPts||[]).map(f=>({...f}));
+      surveyLoaded();
+      log('Survey data restored from project file.','ok');
+    }
+    const allPts=(p.routes||[]).flatMap(r=>r.pts||[]);
+    if(!S.utm && allPts.length){
+      const clat=allPts.reduce((a,q)=>a+q.lat,0)/allPts.length;
+      const clon=allPts.reduce((a,q)=>a+q.lng,0)/allPts.length;
+      setupUTM(clat,clon);
+    }
+    for(const pr of (p.routes||[])){
+      const r=addRoute(pr.pts, pr.name);
+      r.arcs=pr.arcs||{}; r.acType=pr.acType||''; r.runway=pr.runway||'RW'; r.category=pr.category||'CAT I';
+      if(pr.visible===false) r.visible=false;
+    }
+    S.selRoute=null; renderRoutes(); redrawRoutes(); refreshGenState();
+    if(!S.holds.length && (p.routes||[]).length){
+      const b=L.latLngBounds((p.routes||[]).flatMap(r=>r.pts.map(q=>[q.lat,q.lng])));
+      if(b.isValid()) map.fitBounds(b.pad(0.2));
+    }
+    log(`Project loaded: ${(p.routes||[]).length} route(s)${p.aerodrome?' \u00b7 '+p.aerodrome:''}${S.holds.length?'':' \u2014 remember to load the survey file too'}.`,'ok');
+  }catch(err){ log('Project load failed: '+err.message,'err'); }
+  e.target.value='';
+});
+log('Ready. Load the CAP 1732 survey file to begin.');
+</script>
+</body>
+</html>
