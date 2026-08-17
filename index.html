@@ -705,7 +705,7 @@ const MASTER_AIRCRAFT = [{"AC_TYPE":"A19N","LENGTH":33.84,"WINGSPAN":35.8,"NOSE_
 const AC_STORE='am_library_overrides_v1';
 /* Shared aircraft-data service. Set to your Railway URL after deploying.
    Falls back to the built-in MASTER_AIRCRAFT if unreachable (offline-safe). */
-const AIRCRAFT_API = (window.AIRCRAFT_API_URL || "https://YOUR-AIRCRAFT-SERVICE.up.railway.app").replace(/\/$/,"");
+const AIRCRAFT_API = (window.AIRCRAFT_API_URL || "https://aircraft-modelling.up.railway.app").replace(/\/$/,"");
 let AC_MASTER = MASTER_AIRCRAFT.slice();   // replaced by the live list on load
 let AC_SERVICE_OK = false;
 async function acApi(path, opts){
