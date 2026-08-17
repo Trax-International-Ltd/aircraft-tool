@@ -142,7 +142,7 @@ tr.unver td{background:rgba(210,59,59,.06)}
   <img src="assets/logo.png" class="logo" alt="IFP Design Ltd" onerror="this.style.display='none'">
   <h1>Aircraft<span> · </span>Modelling</h1>
   <span class="sub">CAP 1732 taxi-route obstacle surfaces</span>
-  <span class="badge" id="verStamp" title="Tool version and aircraft-data revision">v1.8.1 · Aircraft Modelling</span>
+  <span class="badge" id="verStamp" title="Tool version and aircraft-data revision">v1.8.2 · Aircraft Modelling</span>
   <span id="meta-strip"></span>
   <button class="mini" id="btnHelp" style="margin-left:12px;flex:none">Help</button>
   <button class="mini" id="btnSaveProj" style="flex:none" disabled>Save project</button>
@@ -248,6 +248,36 @@ tr.unver td{background:rgba(210,59,59,.06)}
     <span class="k" style="background:#fff"></span>Obstacle point
   </div>
 </div>
+</div>
+<div id="helpOverlay">
+  <div id="helpPanel">
+    <div class="hp-head"><h2>How to use Aircraft Modelling</h2><button class="hp-close" id="helpClose">✕</button></div>
+    <div class="hp-body">
+      <p>This tool builds CAP 1732 taxiway obstacle surfaces: load a survey, lay out taxi routes, choose aircraft, and generate the obstacle points for CAD.</p>
+
+      <h3>1 · Survey file</h3>
+      <p>Load the surveyor's CAP 1732 export (.csv or .xlsx). <b>HOLD</b> points provide positions and orthometric elevations; <b>CENTRE_PT_RWY</b> builds the runway centreline; <b>STAND</b>s are shown for reference.</p>
+
+      <h3>2 · Taxiway network</h3>
+      <p>Connect the surveyed holds into taxiway routes, build the runway centreline from the survey, draw routes over imagery with hold-snapping, or import SHP/GeoJSON from CAD.</p>
+      <p><b>Drawing:</b> click to add vertices (snaps to holds) · double-click or <b>Enter</b> to finish · <b>Esc</b> cancels.</p>
+      <p><b>Curves:</b> select a route, then drag a <b>diamond mid-segment handle</b> sideways to bow that segment into an arc; right-click it to straighten; <b>double-click it to split</b> the segment (adds a vertex, so compound / S-curves can be fitted piece by piece). Right-click a round vertex to delete it.</p>
+
+      <h3>3 · Aircraft types &amp; verification</h3>
+      <p>Dimensions are in metres, heights above ground; elevation = nearest hold ortho height + offset. Library LENGTH / WINGSPAN / TAIL_H are published figures; <b>NOSE_TO_WING, NOSE_H and WING_H are conservative estimates — verify against the manufacturer's airport planning manual</b> (cross-check at Eurocontrol's Aircraft Performance Database).</p>
+      <p>The table starts empty each project — pull in just the types you need from the built-in library (43 ACAP-extracted types plus regional estimates; hover a row for its source).</p>
+      <p><b>Every type must be signed off</b> as checked against the manufacturer's ACAP before it can be used — editing any dimension clears that sign-off. Sign-offs are <b>shared live with the whole team</b> through the aircraft-data service: verifying a type here marks it verified for everyone, instantly. If the service is unreachable the tool works offline and sign-offs stay local until reconnected. CSV export/import remains for a controlled snapshot.</p>
+
+      <h3>4 · Routes</h3>
+      <p>Assign each route its aircraft type plus the runway and category used to group the export files (<span class="badge">RUNWAY_CATEGORY.csv</span>). Select a route to edit vertices: drag to move, right-click a vertex to delete.</p>
+
+      <h3>5 · Generate &amp; export</h3>
+      <p>Station spacing = aircraft length + gap, matching the QGIS tool (length + 100 m). Set the radius, gap and hold-match tolerance, generate the obstacle points, then download the grouped CSVs (zip) or the validation workbook.</p>
+
+      <h3>Projects</h3>
+      <p>Save the whole project (survey, routes, aircraft table) to a file with <b>Save project</b>, and reload it later with <b>Load project</b>. <b>Reset everything</b> clears the session.</p>
+    </div>
+  </div>
 </div>
 <script>
 /* ================= state ================= */
@@ -705,7 +735,7 @@ const MASTER_AIRCRAFT = [{"AC_TYPE":"A19N","LENGTH":33.84,"WINGSPAN":35.8,"NOSE_
 const AC_STORE='am_library_overrides_v1';
 /* Shared aircraft-data service. Set to your Railway URL after deploying.
    Falls back to the built-in MASTER_AIRCRAFT if unreachable (offline-safe). */
-const AIRCRAFT_API = (window.AIRCRAFT_API_URL || "https://aircraft-modelling.up.railway.app").replace(/\/$/,"");
+const AIRCRAFT_API = (window.AIRCRAFT_API_URL || "https://YOUR-AIRCRAFT-SERVICE.up.railway.app").replace(/\/$/,"");
 let AC_MASTER = MASTER_AIRCRAFT.slice();   // replaced by the live list on load
 let AC_SERVICE_OK = false;
 async function acApi(path, opts){
@@ -1185,37 +1215,6 @@ $('projFile').addEventListener('change',async e=>{
 });
 log('Ready. Load the CAP 1732 survey file to begin.');
 </script>
-
-<div id="helpOverlay">
-  <div id="helpPanel">
-    <div class="hp-head"><h2>How to use Aircraft Modelling</h2><button class="hp-close" id="helpClose">✕</button></div>
-    <div class="hp-body">
-      <p>This tool builds CAP 1732 taxiway obstacle surfaces: load a survey, lay out taxi routes, choose aircraft, and generate the obstacle points for CAD.</p>
-
-      <h3>1 · Survey file</h3>
-      <p>Load the surveyor's CAP 1732 export (.csv or .xlsx). <b>HOLD</b> points provide positions and orthometric elevations; <b>CENTRE_PT_RWY</b> builds the runway centreline; <b>STAND</b>s are shown for reference.</p>
-
-      <h3>2 · Taxiway network</h3>
-      <p>Connect the surveyed holds into taxiway routes, build the runway centreline from the survey, draw routes over imagery with hold-snapping, or import SHP/GeoJSON from CAD.</p>
-      <p><b>Drawing:</b> click to add vertices (snaps to holds) · double-click or <b>Enter</b> to finish · <b>Esc</b> cancels.</p>
-      <p><b>Curves:</b> select a route, then drag a <b>diamond mid-segment handle</b> sideways to bow that segment into an arc; right-click it to straighten; <b>double-click it to split</b> the segment (adds a vertex, so compound / S-curves can be fitted piece by piece). Right-click a round vertex to delete it.</p>
-
-      <h3>3 · Aircraft types &amp; verification</h3>
-      <p>Dimensions are in metres, heights above ground; elevation = nearest hold ortho height + offset. Library LENGTH / WINGSPAN / TAIL_H are published figures; <b>NOSE_TO_WING, NOSE_H and WING_H are conservative estimates — verify against the manufacturer's airport planning manual</b> (cross-check at Eurocontrol's Aircraft Performance Database).</p>
-      <p>The table starts empty each project — pull in just the types you need from the built-in library (43 ACAP-extracted types plus regional estimates; hover a row for its source).</p>
-      <p><b>Every type must be signed off</b> as checked against the manufacturer's ACAP before it can be used — editing any dimension clears that sign-off. Sign-offs are <b>shared live with the whole team</b> through the aircraft-data service: verifying a type here marks it verified for everyone, instantly. If the service is unreachable the tool works offline and sign-offs stay local until reconnected. CSV export/import remains for a controlled snapshot.</p>
-
-      <h3>4 · Routes</h3>
-      <p>Assign each route its aircraft type plus the runway and category used to group the export files (<span class="badge">RUNWAY_CATEGORY.csv</span>). Select a route to edit vertices: drag to move, right-click a vertex to delete.</p>
-
-      <h3>5 · Generate &amp; export</h3>
-      <p>Station spacing = aircraft length + gap, matching the QGIS tool (length + 100 m). Set the radius, gap and hold-match tolerance, generate the obstacle points, then download the grouped CSVs (zip) or the validation workbook.</p>
-
-      <h3>Projects</h3>
-      <p>Save the whole project (survey, routes, aircraft table) to a file with <b>Save project</b>, and reload it later with <b>Load project</b>. <b>Reset everything</b> clears the session.</p>
-    </div>
-  </div>
-</div>
 
 </body>
 </html>
