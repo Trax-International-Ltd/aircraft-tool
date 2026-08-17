@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aircraft Modelling — Ground Obstacle Generator</title>
+<title>Aircraft Modelling</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.11.0/proj4.min.js"></script>
@@ -110,16 +110,42 @@ tr.unver td{background:rgba(210,59,59,.06)}
   #map{min-height:45%;order:1}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* Help slide-over */
+#helpOverlay{position:fixed;inset:0;background:rgba(0,32,57,.35);z-index:1000;display:none}
+#helpOverlay.on{display:block}
+#helpPanel{position:fixed;top:0;right:0;height:100vh;width:min(560px,94vw);background:#fff;
+  box-shadow:-4px 0 24px rgba(0,32,57,.18);z-index:1001;overflow-y:auto;transform:translateX(100%);
+  transition:transform .22s ease}
+#helpOverlay.on #helpPanel{transform:translateX(0)}
+#helpPanel .hp-head{display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff}
+#helpPanel .hp-head h2{font-size:16px;color:var(--navy);font-weight:700}
+#helpPanel .hp-close{border:none;background:none;font-size:20px;color:var(--dim);cursor:pointer;padding:0 4px}
+#helpPanel .hp-close:hover{color:var(--navy)}
+#helpPanel .hp-body{padding:16px 20px 40px}
+#helpPanel h3{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--brand-blue);
+  margin:20px 0 6px;padding-top:14px;border-top:1px solid var(--line)}
+#helpPanel h3:first-child{border-top:none;padding-top:0;margin-top:0}
+#helpPanel p{font-size:13px;line-height:1.55;color:var(--ink);margin:6px 0}
+#helpPanel ul{margin:6px 0 6px 18px;font-size:13px;line-height:1.55}
+#helpPanel li{margin:3px 0}
+#helpPanel b{color:var(--navy)}
+#helpPanel a{color:var(--brand-blue)}
+.help-link{font-size:11.5px;color:var(--brand-blue);text-decoration:none;white-space:nowrap}
+.help-link:hover{text-decoration:underline}
+
 </style>
 </head>
 <body>
 <header>
   <img src="assets/logo.png" class="logo" alt="IFP Design Ltd" onerror="this.style.display='none'">
-  <h1>Taxi-Route Obstacle<span> · </span>Generator</h1>
-  <span class="sub">taxi-route obstacle generator · CAP 1732 input</span>
-  <span class="badge" id="verStamp" title="Tool version and aircraft-data revision">v1.7 · shared aircraft data</span>
+  <h1>Aircraft<span> · </span>Modelling</h1>
+  <span class="sub">CAP 1732 taxi-route obstacle surfaces</span>
+  <span class="badge" id="verStamp" title="Tool version and aircraft-data revision">v1.8 · Aircraft Modelling</span>
   <span id="meta-strip"></span>
-  <button class="mini" id="btnSaveProj" style="margin-left:12px;flex:none" disabled>Save project</button>
+  <button class="mini" id="btnHelp" style="margin-left:12px;flex:none">Help</button>
+  <button class="mini" id="btnSaveProj" style="flex:none" disabled>Save project</button>
   <label class="filebtn" style="flex:none"><input type="file" id="projFile" accept=".json"><button class="mini" onclick="document.getElementById('projFile').click()">Load project</button></label>
   <button class="mini danger" id="btnResetAll" style="flex:none">Reset everything</button>
 </header>
@@ -129,7 +155,7 @@ tr.unver td{background:rgba(210,59,59,.06)}
   <section class="step" id="s1">
     <h2>1 · Survey file <span class="tick" id="t1">—</span></h2>
     <div class="body">
-      <p class="hint">Load the surveyor's CAP 1732 export (.csv or .xlsx). HOLD points provide positions and orthometric elevations; CENTRE_PT_RWY builds the runway centreline; STANDs are shown for reference.</p>
+      <p class="hint">Load the surveyor's CAP 1732 export (.csv or .xlsx). <a href="#" class="help-link">How this works</a></p>
       <div class="row">
         <label class="filebtn"><input type="file" id="surveyFile" accept=".csv,.xlsx,.xls"><button class="primary" onclick="document.getElementById('surveyFile').click()">Load survey file</button></label>
         <span class="small" id="surveyStats"></span>
@@ -140,7 +166,7 @@ tr.unver td{background:rgba(210,59,59,.06)}
   <section class="step" id="s2">
     <h2>2 · Taxiway network <span class="tick" id="t2">—</span></h2>
     <div class="body">
-      <p class="hint">Connect the surveyed holds into taxiway routes, build the runway centreline from the survey, draw routes over imagery with hold-snapping, or import SHP/GeoJSON from CAD.</p>
+      <p class="hint">Build routes from holds, the runway centreline, freehand drawing, or a CAD import. <a href="#" class="help-link">Drawing &amp; curves guide</a></p>
       <div class="row">
         <button id="btnConnect" disabled>Connect holds → taxiway routes</button>
         <button id="btnRwyRoute" disabled>Runway centreline → route</button>
@@ -149,14 +175,14 @@ tr.unver td{background:rgba(210,59,59,.06)}
         <button id="btnDraw" disabled>Draw route</button>
         <label class="filebtn"><input type="file" id="lineFile" accept=".zip,.shp,.geojson,.json"><button onclick="document.getElementById('lineFile').click()">Import SHP / GeoJSON</button></label>
       </div>
-      <p class="small">Drawing: click to add vertices (snaps to holds) · double-click or <b>Enter</b> to finish · <b>Esc</b> cancels.<br>Curves: select a route, then drag a <b>diamond mid-segment handle</b> sideways to bow that segment into an arc; right-click it to straighten; <b>double-click it to split the segment</b> (adds a vertex, so compound/S-curves can be fitted piece by piece). Right-click a round vertex to delete it.</p>
+
     </div>
   </section>
 
   <section class="step" id="s4">
     <h2>3 · Aircraft types <span class="tick" id="t4"></span></h2>
     <div class="body">
-      <p class="hint">Dimensions in metres, heights above ground; elevation = nearest hold ortho height + offset. Library LENGTH / WINGSPAN / TAIL_H are published figures; <b>NOSE_TO_WING, NOSE_H and WING_H are conservative estimates — verify against the manufacturer's airport planning manual</b> (cross-check dims at Eurocontrol's Aircraft Performance Database). The table starts empty each project \u2014 pull in just the types you need from the built-in library (43 ACAP-extracted types plus regional estimates, hover a row for its source). Corrections you make are remembered by this browser and applied whenever that type is added in future; project files carry the table with them. Every type must be signed off as checked against the manufacturer's ACAP before it can be used \u2014 editing any dimension clears that sign-off. Sign-offs are now shared live with the whole team through the aircraft-data service \u2014 verifying a type here marks it verified for everyone, instantly. If the service is unreachable the tool works offline and sign-offs stay local until reconnected. CSV export/import remains for a controlled snapshot.</p>
+      <p class="hint">Add the types you need from the library. Each must be signed off against the ACAP before use — sign-offs are shared live with the team. <a href="#" class="help-link">About verification</a></p>
       <div class="row">
         <select id="libSelect" style="max-width:230px"></select>
         <button class="mini" id="btnLibAdd">Add from library</button>
@@ -174,7 +200,7 @@ tr.unver td{background:rgba(210,59,59,.06)}
   <section class="step" id="s3">
     <h2>4 · Routes <span class="tick" id="t3">—</span></h2>
     <div class="body">
-      <p class="hint">Assign each route its aircraft type plus the runway and category used to group the export files (<span class="badge">RUNWAY_CATEGORY.csv</span>). Select a route to edit vertices: drag to move, right-click a vertex to delete.</p>
+      <p class="hint">Assign each route an aircraft type, runway and category. <a href="#" class="help-link">Editing routes</a></p>
       <div class="row">
         <button class="mini danger" id="btnClearRoutes" disabled>Clear routes</button>
       </div>
@@ -192,7 +218,7 @@ tr.unver td{background:rgba(210,59,59,.06)}
         <div class="field"><span>Gap between aircraft (m)</span><input type="number" id="inGap" value="100" step="10" style="width:120px"></div>
         <div class="field"><span>Hold match tol (m)</span><input type="number" id="inHoldTol" value="1.0" step="0.5" style="width:100px"></div>
       </div>
-      <p class="small" style="margin-bottom:8px">Station spacing = aircraft length + gap, matching the QGIS tool (length + 100 m).</p>
+      <p class="small" style="margin-bottom:8px">Station spacing = aircraft length + gap. <a href="#" class="help-link">Parameters explained</a></p>
       <div id="gateMsg"></div>
       <div class="row">
         <button class="primary" id="btnGen" disabled>Generate obstacle points</button>
@@ -679,7 +705,7 @@ const MASTER_AIRCRAFT = [{"AC_TYPE":"A19N","LENGTH":33.84,"WINGSPAN":35.8,"NOSE_
 const AC_STORE='am_library_overrides_v1';
 /* Shared aircraft-data service. Set to your Railway URL after deploying.
    Falls back to the built-in MASTER_AIRCRAFT if unreachable (offline-safe). */
-const AIRCRAFT_API = (window.AIRCRAFT_API_URL || "https://aircraft-modelling.up.railway.app").replace(/\/$/,"");
+const AIRCRAFT_API = (window.AIRCRAFT_API_URL || "https://YOUR-AIRCRAFT-SERVICE.up.railway.app").replace(/\/$/,"");
 let AC_MASTER = MASTER_AIRCRAFT.slice();   // replaced by the live list on load
 let AC_SERVICE_OK = false;
 async function acApi(path, opts){
@@ -811,6 +837,16 @@ function renderLibSelect(){
 renderLibSelect();
 // Pull the shared aircraft data on load, then refresh views with live verification.
 loadAircraftMaster().then(()=>{ renderLibSelect(); if(S.aircraft.length) renderAcTable(); refreshGenState&&refreshGenState(); });
+(function(){
+  const ov=document.getElementById('helpOverlay');
+  const open=()=>ov.classList.add('on');
+  const close=()=>ov.classList.remove('on');
+  document.getElementById('btnHelp').addEventListener('click',open);
+  document.getElementById('helpClose').addEventListener('click',close);
+  ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
+  document.querySelectorAll('.help-link').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();open();}));
+})();
 $('btnLibAdd').addEventListener('click',()=>{
   const t=$('libSelect').value;
   if(S.aircraft.some(a=>a.AC_TYPE===t)){ log(`${t} is already in the table.`,'warn'); return; }
@@ -1145,5 +1181,37 @@ $('projFile').addEventListener('change',async e=>{
 });
 log('Ready. Load the CAP 1732 survey file to begin.');
 </script>
+
+<div id="helpOverlay">
+  <div id="helpPanel">
+    <div class="hp-head"><h2>How to use Aircraft Modelling</h2><button class="hp-close" id="helpClose">✕</button></div>
+    <div class="hp-body">
+      <p>This tool builds CAP 1732 taxiway obstacle surfaces: load a survey, lay out taxi routes, choose aircraft, and generate the obstacle points for CAD.</p>
+
+      <h3>1 · Survey file</h3>
+      <p>Load the surveyor's CAP 1732 export (.csv or .xlsx). <b>HOLD</b> points provide positions and orthometric elevations; <b>CENTRE_PT_RWY</b> builds the runway centreline; <b>STAND</b>s are shown for reference.</p>
+
+      <h3>2 · Taxiway network</h3>
+      <p>Connect the surveyed holds into taxiway routes, build the runway centreline from the survey, draw routes over imagery with hold-snapping, or import SHP/GeoJSON from CAD.</p>
+      <p><b>Drawing:</b> click to add vertices (snaps to holds) · double-click or <b>Enter</b> to finish · <b>Esc</b> cancels.</p>
+      <p><b>Curves:</b> select a route, then drag a <b>diamond mid-segment handle</b> sideways to bow that segment into an arc; right-click it to straighten; <b>double-click it to split</b> the segment (adds a vertex, so compound / S-curves can be fitted piece by piece). Right-click a round vertex to delete it.</p>
+
+      <h3>3 · Aircraft types &amp; verification</h3>
+      <p>Dimensions are in metres, heights above ground; elevation = nearest hold ortho height + offset. Library LENGTH / WINGSPAN / TAIL_H are published figures; <b>NOSE_TO_WING, NOSE_H and WING_H are conservative estimates — verify against the manufacturer's airport planning manual</b> (cross-check at Eurocontrol's Aircraft Performance Database).</p>
+      <p>The table starts empty each project — pull in just the types you need from the built-in library (43 ACAP-extracted types plus regional estimates; hover a row for its source).</p>
+      <p><b>Every type must be signed off</b> as checked against the manufacturer's ACAP before it can be used — editing any dimension clears that sign-off. Sign-offs are <b>shared live with the whole team</b> through the aircraft-data service: verifying a type here marks it verified for everyone, instantly. If the service is unreachable the tool works offline and sign-offs stay local until reconnected. CSV export/import remains for a controlled snapshot.</p>
+
+      <h3>4 · Routes</h3>
+      <p>Assign each route its aircraft type plus the runway and category used to group the export files (<span class="badge">RUNWAY_CATEGORY.csv</span>). Select a route to edit vertices: drag to move, right-click a vertex to delete.</p>
+
+      <h3>5 · Generate &amp; export</h3>
+      <p>Station spacing = aircraft length + gap, matching the QGIS tool (length + 100 m). Set the radius, gap and hold-match tolerance, generate the obstacle points, then download the grouped CSVs (zip) or the validation workbook.</p>
+
+      <h3>Projects</h3>
+      <p>Save the whole project (survey, routes, aircraft table) to a file with <b>Save project</b>, and reload it later with <b>Load project</b>. <b>Reset everything</b> clears the session.</p>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
