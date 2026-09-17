@@ -28,6 +28,14 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{font-family:var(--sans);background:var(--bg);color:var(--ink);display:flex;flex-direction:column;overflow:hidden}
+/* ---- IFP Portal breadcrumb bar (shared with the other portal utilities) ---- */
+.ifp-bar{display:flex;align-items:center;gap:12px;height:44px;flex:0 0 auto;padding:0 18px;
+  background:var(--navy);color:#fff;font-family:var(--sans);font-size:13px;line-height:1;position:relative;z-index:30}
+.ifp-bar a.ifp-home{display:inline-flex;align-items:center;gap:8px;color:#fff;text-decoration:none;font-weight:600;font-size:15px}
+.ifp-bar a.ifp-home svg{width:14px;height:14px;fill:#5fb6e6}
+.ifp-bar a.ifp-home:hover{color:#8fd0f3}
+.ifp-bar .ifp-sep,.ifp-bar .ifp-here{color:#a8bccb}
+.ifp-bar .ifp-kind{margin-left:auto;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a8bccb}
 header{display:flex;align-items:center;gap:14px;padding:0 16px;height:60px;background:#fff;border-bottom:1px solid var(--line)}
 header .logo{max-height:44px;max-width:150px}
 header h1{font-size:16px;font-weight:700;letter-spacing:-.01em;color:var(--navy)}
@@ -138,6 +146,12 @@ tr.unver td{background:rgba(210,59,59,.06)}
 </style>
 </head>
 <body>
+<div class="ifp-bar">
+  <a class="ifp-home" href="https://trax-international-ltd.github.io/ifp-portal/"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="M224,120v96a8,8,0,0,1-8,8H160a8,8,0,0,1-8-8V164a4,4,0,0,0-4-4H108a4,4,0,0,0-4,4v52a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V120a16,16,0,0,1,4.69-11.31l80-80a16,16,0,0,1,22.62,0l80,80A16,16,0,0,1,224,120Z"/></svg>IFP Portal</a>
+  <span class="ifp-sep">/</span>
+  <span class="ifp-here">Aircraft Modelling</span>
+  <span class="ifp-kind">Utility</span>
+</div>
 <header>
   <img src="assets/logo.png" class="logo" alt="IFP Design Ltd" onerror="this.style.display='none'">
   <h1>Aircraft<span> · </span>Modelling</h1>
